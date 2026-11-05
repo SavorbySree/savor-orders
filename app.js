@@ -6,12 +6,13 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.2.0';
+var VERSION = '2.4.0';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
 var CATS = ['Bundles', 'Cookies', 'Brownies', 'Cheesecakes', 'Basque', 'Tiramisu', 'Tres Leches', 'Savoury', 'Cakes', 'Add-ons'];
-var ALLERGENS = ['Gluten', 'Milk', 'Eggs', 'Nuts', 'Peanuts', 'Soya', 'Sesame', 'Celery', 'Mustard', 'Sulphites', 'Lupin', 'Fish', 'Crustaceans', 'Molluscs'];
+var ALLERGENS = ['Wheat', 'Milk', 'Eggs', 'Soya', 'Sesame', 'Mustard', 'Sulphites', 'Celery', 'Lupin', 'Peanuts', 'Nuts', 'Almonds', 'Hazelnuts', 'Pistachio', 'Cashew', 'Walnuts', 'Fish', 'Crustaceans', 'Molluscs'];
+var BADGES = ['Best seller', 'Our recommends', 'Customer favourite', 'Season special'];
 var DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -71,33 +72,9 @@ function mapsUrl(q) { return 'https://www.google.com/maps/search/?api=1&query=' 
 /* ---------- data ---------- */
 function opt(label, price) { return { label: label, price: price }; }
 function m(id, cat, name, options, extra) { var o = { id: id, cat: cat, name: name, options: options, includes: [], active: true, seasonal: false }; for (var k in (extra || {})) o[k] = extra[k]; return o; }
-function defaultMenu() {
-  var p4 = function (price) { return [opt('Pack of 4', price)]; };
-  return [
-    m('share-box', 'Bundles', 'Share Box', [opt('Bundle', 32)], { includes: ['Chocochip Cookies · Pack of 4', 'Brownie · Sharing tray'] }),
-    m('treat-box', 'Bundles', 'Treat Box', [opt('Bundle', 32)], { includes: ['Chocochip Cookies · Pack of 4', 'Cheesecakes or Basque · Pack of 4'] }),
-    m('dessert-duo', 'Bundles', 'Dessert Duo', [opt('Bundle', 38)], { includes: ['Tiramisu · Sharing tray', 'Brownie · Sharing tray'] }),
-    m('birthday-bundle', 'Bundles', 'Birthday Bundle', [opt('Bundle', 48)], { includes: ['6 inch cake', 'Chocochip Cookies · Pack of 4', 'Candles and card'] }),
-    m('diwali-hamper', 'Bundles', 'Diwali Delights hamper', [opt('Hamper', 30)], { seasonal: true, includes: ['Diwali Delights hamper'] }),
-    m('cookie-chocochip', 'Cookies', 'Chocochip Cookies', p4(16)),
-    m('cookie-pistachio', 'Cookies', 'Pistachio NYC Cookies', p4(16)),
-    m('cookie-gulab', 'Cookies', 'Gulab Jamun Cookies', p4(16), { seasonal: true }),
-    m('brownie', 'Brownies', 'Brownie', [opt('Sharing tray', 20), opt('Celebration tray', 38)]),
-    m('cheesecake', 'Cheesecakes', 'Cheesecakes', p4(20)),
-    m('basque', 'Basque', 'Burnt Basque', p4(20)),
-    m('tiramisu', 'Tiramisu', 'Tiramisu', [opt('Sharing tray', 22), opt('Celebration tray', 40)]),
-    m('tl-rasmalai', 'Tres Leches', 'Rasmalai Tres Leches', [opt('Sharing tray', 25), opt('Celebration tray', 40)]),
-    m('tl-rose', 'Tres Leches', 'Rose & Pistachio Tres Leches', [opt('Sharing tray', 25), opt('Celebration tray', 40)]),
-    m('tl-classic', 'Tres Leches', 'Classic Tres Leches with Fruits', [opt('Sharing tray', 20), opt('Celebration tray', 35)]),
-    m('savoury', 'Savoury', 'Savoury Bakes', p4(16)),
-    m('cake', 'Cakes', 'Celebration cake', [opt('6 inch, 3 layers (~1 kg, serves 8–10)', 35), opt('10 inch (~1.5 kg, serves 10–15)', 50), opt('Custom (quote)', 0)]),
-    m('addon-twoflav', 'Add-ons', 'Two-flavour cake', [opt('Extra', 5)]),
-    m('addon-fondant', 'Add-ons', 'Fondant finish', [opt('Per 0.5 kg', 5)]),
-    m('addon-candles', 'Add-ons', 'Candles', [opt('Set', 0.75)]),
-    m('addon-knife', 'Add-ons', 'Wooden knife', [opt('Each', 0.75)]),
-    m('addon-card', 'Add-ons', 'Personalised greeting card', [opt('Each', 2.99)])
-  ];
-}
+/* The full website menu (same as the shared database). Used to start a new database and by "Reset menu". */
+var MENU_ROWS = [{"id": "share-box", "cat": "Bundles", "name": "Share Box", "description": "Cookies and brownies to share, in one order.", "options": [{"label": "Bundle", "price": 32}], "includes": ["Pack of 4 Chocochip NYC cookies", "Brownie sharing tray (serves 4)"], "badge": "Save €4", "tags": [], "seasonal": false, "allergens": [], "active": true, "sort": 0}, {"id": "treat-box", "cat": "Bundles", "name": "Treat Box", "description": "Something chewy and something creamy.", "options": [{"label": "Bundle", "price": 32}], "includes": ["Pack of 4 Chocochip NYC cookies", "Pack of 4 cheesecakes or Burnt Basque"], "badge": "Save €4", "tags": [], "seasonal": false, "allergens": [], "active": true, "sort": 1}, {"id": "dessert-duo", "cat": "Bundles", "name": "Dessert Duo", "description": "Two of our sharing trays, one price.", "options": [{"label": "Bundle", "price": 38}], "includes": ["Tiramisu sharing tray (serves 4)", "Brownie sharing tray (serves 4)"], "badge": "Save €4", "tags": [], "seasonal": false, "allergens": [], "active": true, "sort": 2}, {"id": "birthday-bundle", "cat": "Bundles", "name": "Birthday Bundle", "description": "A celebration cake with cookies on the side, plus candles and a card on us.", "options": [{"label": "Bundle", "price": 48}], "includes": ["6 inch, 3 layer celebration cake (from €35)", "Pack of 4 Chocochip NYC cookies", "Candles", "Personalised greeting card"], "badge": "Save €3", "tags": [], "seasonal": false, "allergens": [], "active": true, "sort": 3}, {"id": "diwali-delights", "cat": "Bundles", "name": "Hamper 1: Diwali Delights", "description": "Our festive favourites in one gift-ready box, handmade in small batches.", "options": [{"label": "Hamper", "price": 30}], "includes": ["Gulab Jamun NYC Cookie", "Fudgy Chocolate Brownie", "Motichoor Basque Cheesecake", "Filter Kaapi Tiramisu (120 ml)", "Rasmalai Tres Leches", "Mini Ghee Jar", "Ladoo Candle", "Festive Diwali Stickers"], "badge": "Season special", "tags": ["Hamper"], "seasonal": true, "allergens": [], "active": true, "sort": 4}, {"id": "pistachio-nyc-cookie", "cat": "Cookies", "name": "Pistachio NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Pistachio", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 5}, {"id": "matcha-nyc-cookie", "cat": "Cookies", "name": "Matcha NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 6}, {"id": "nutella-ferrero-nyc-cookie", "cat": "Cookies", "name": "Nutella Ferrero NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Hazelnuts", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 7}, {"id": "gulab-jamun-nyc-cookie", "cat": "Cookies", "name": "Gulab Jamun NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Almonds", "Pistachio"], "badge": "Season special", "tags": [], "seasonal": true, "description": null, "includes": [], "active": true, "sort": 8}, {"id": "og-chocochip-nyc-cookie", "cat": "Cookies", "name": "OG Chocochip NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 9}, {"id": "kinder-bueno-nyc-cookie", "cat": "Cookies", "name": "Kinder Bueno NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Hazelnuts", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 10}, {"id": "raspberry-white-chocolate-nyc-cookie", "cat": "Cookies", "name": "Raspberry White Chocolate NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 11}, {"id": "oreo-nyc-cookie", "cat": "Cookies", "name": "Oreo NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 12}, {"id": "red-velvet-nyc-cookie", "cat": "Cookies", "name": "Red Velvet NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 13}, {"id": "triple-chocolate-nyc-cookie", "cat": "Cookies", "name": "Triple Chocolate NYC Cookie", "options": [{"label": "Pack of 4", "price": 16, "note": "4 cookies"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 14}, {"id": "fudgy-chocolate-brownie", "cat": "Brownies", "name": "Fudgy Chocolate Brownie", "options": [{"label": "Sharing tray", "price": 20, "note": "Serves 4"}, {"label": "Celebration tray", "price": 38, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 15}, {"id": "mango-cheesecake", "cat": "Cheesecakes", "name": "Mango Cheesecake", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Soya", "Sulphites"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 16}, {"id": "raspberry-white-chocolate-cheesecake", "cat": "Cheesecakes", "name": "Raspberry White Chocolate Cheesecake", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 17}, {"id": "lemon-meringue-cheesecake", "cat": "Cheesecakes", "name": "Lemon Meringue Cheesecake", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 18}, {"id": "biscoff-cheesecake", "cat": "Cheesecakes", "name": "Biscoff Cheesecake", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 19}, {"id": "classic-vanilla-burnt-basque", "cat": "Basque", "name": "Classic Vanilla Burnt Basque", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 20}, {"id": "motichoor-basque-cheesecake", "cat": "Basque", "name": "Motichoor Basque Cheesecake", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Nuts"], "badge": "Season special", "tags": [], "seasonal": true, "description": null, "includes": [], "active": true, "sort": 21}, {"id": "baileys-burnt-basque", "cat": "Basque", "name": "Baileys Burnt Basque", "options": [{"label": "Pack of 4", "price": 20, "note": "4 pieces"}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": ["Contains alcohol"], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 22}, {"id": "classic-tiramisu", "cat": "Tiramisu", "name": "Classic Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 23}, {"id": "filter-kaapi-tiramisu", "cat": "Tiramisu", "name": "Filter Kaapi Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 24}, {"id": "chocolate-hazelnut-tiramisu", "cat": "Tiramisu", "name": "Chocolate Hazelnut Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Hazelnuts", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 25}, {"id": "pistachio-tiramisu", "cat": "Tiramisu", "name": "Pistachio Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Pistachio", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 26}, {"id": "lemon-tiramisu", "cat": "Tiramisu", "name": "Lemon Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 27}, {"id": "berry-swirl-tiramisu", "cat": "Tiramisu", "name": "Berry Swirl Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 28}, {"id": "baileys-tiramisu", "cat": "Tiramisu", "name": "Baileys Tiramisu", "options": [{"label": "Sharing tray", "price": 22, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": ["Contains alcohol"], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 29}, {"id": "rasmalai-tres-leches", "cat": "Tres Leches", "name": "Rasmalai Tres Leches", "options": [{"label": "Sharing tray", "price": 25, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Almonds", "Pistachio"], "badge": "Season special", "tags": [], "seasonal": true, "description": null, "includes": [], "active": true, "sort": 30}, {"id": "rose-and-pistachio-tres-leches", "cat": "Tres Leches", "name": "Rose & Pistachio Tres Leches", "options": [{"label": "Sharing tray", "price": 25, "note": "Serves 4"}, {"label": "Celebration tray", "price": 40, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk", "Pistachio"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 31}, {"id": "classic-tres-leches-with-fruits", "cat": "Tres Leches", "name": "Classic Tres Leches with Fruits", "options": [{"label": "Sharing tray", "price": 20, "note": "Serves 4"}, {"label": "Celebration tray", "price": 35, "note": "Serves up to 8"}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 32}, {"id": "paneer-tikka-slider", "cat": "Savoury", "name": "Paneer Tikka Slider", "options": [{"label": "Pack of 4", "price": 16, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 33}, {"id": "korean-garlic-cream-bun", "cat": "Savoury", "name": "Korean Garlic Cream Bun", "options": [{"label": "Pack of 4", "price": 16, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Sesame", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 34}, {"id": "aloo-samosa-scroll", "cat": "Savoury", "name": "Aloo Samosa Scroll", "options": [{"label": "Pack of 4", "price": 16, "note": "4 pieces"}], "allergens": ["Wheat", "Milk", "Mustard"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 35}, {"id": "classic-vanilla-cake", "cat": "Cakes", "name": "Classic Vanilla Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 36}, {"id": "biscoff-cake", "cat": "Cakes", "name": "Biscoff Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 37}, {"id": "mango-cake", "cat": "Cakes", "name": "Mango Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 38}, {"id": "fresh-fruit-cake", "cat": "Cakes", "name": "Fresh Fruit Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 39}, {"id": "pineapple-cake", "cat": "Cakes", "name": "Pineapple Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 40}, {"id": "berrylicious-cake", "cat": "Cakes", "name": "Berrylicious Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 41}, {"id": "cookies-and-cream-cake", "cat": "Cakes", "name": "Cookies & Cream Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 42}, {"id": "gulab-jamun-cake", "cat": "Cakes", "name": "Gulab Jamun Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Almonds", "Pistachio"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 43}, {"id": "rasmalai-cake", "cat": "Cakes", "name": "Rasmalai Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Almonds", "Pistachio"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 44}, {"id": "belgian-chocolate-cake", "cat": "Cakes", "name": "Belgian Chocolate Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 45}, {"id": "chocolate-fudge-cake", "cat": "Cakes", "name": "Chocolate Fudge Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 46}, {"id": "ferrero-rocher-cake", "cat": "Cakes", "name": "Ferrero Rocher Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Hazelnuts", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 47}, {"id": "matilda-cake", "cat": "Cakes", "name": "Matilda Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 48}, {"id": "black-forest-cake", "cat": "Cakes", "name": "Black Forest Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 49}, {"id": "red-velvet-cake", "cat": "Cakes", "name": "Red Velvet Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 50}, {"id": "coffee-cake", "cat": "Cakes", "name": "Coffee Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 51}, {"id": "birthday-cake", "cat": "Cakes", "name": "Birthday Cake", "options": [{"label": "6 inch, 3 layers", "price": 35, "note": "around 1 kg, 8–10 servings"}, {"label": "10 inch", "price": 50, "note": "around 1.5 kg, 10–15 servings"}, {"label": "Custom (quote)", "price": 0}], "allergens": ["Wheat", "Milk", "Soya"], "badge": null, "tags": [], "seasonal": false, "description": null, "includes": [], "active": true, "sort": 52}, {"id": "addon-candle", "cat": "Add-ons", "name": "Candles", "options": [{"label": "Each", "price": 0.75}], "description": null, "includes": [], "allergens": [], "badge": null, "tags": [], "active": true, "seasonal": false, "sort": 53}, {"id": "addon-knife", "cat": "Add-ons", "name": "Wooden knife", "options": [{"label": "Each", "price": 0.75}], "description": null, "includes": [], "allergens": [], "badge": null, "tags": [], "active": true, "seasonal": false, "sort": 54}, {"id": "addon-card", "cat": "Add-ons", "name": "Personalised greeting card", "options": [{"label": "Each", "price": 2.99}], "description": null, "includes": [], "allergens": [], "badge": null, "tags": [], "active": true, "seasonal": false, "sort": 55}, {"id": "addon-twoflav", "cat": "Add-ons", "name": "Two-flavour cake", "options": [{"label": "Extra", "price": 5}], "description": null, "includes": [], "allergens": [], "badge": null, "tags": [], "active": true, "seasonal": false, "sort": 56}, {"id": "addon-fondant", "cat": "Add-ons", "name": "Fondant finish", "options": [{"label": "Per 0.5 kg", "price": 5}], "description": null, "includes": [], "allergens": [], "badge": null, "tags": [], "active": true, "seasonal": false, "sort": 57}];
+function defaultMenu() { return MENU_ROWS.map(function (r) { return fromMenuRow(JSON.parse(JSON.stringify(r))); }); }
 function defaultSettings() {
   return {
     confirmMsg: 'Hi {name}, thank you for ordering with Savor by Sree! Your order {ref} is confirmed.\n\n{items}\n\n{when_line}\nTotal: {total}\n\nSee you soon!',
@@ -106,12 +83,12 @@ function defaultSettings() {
   };
 }
 function defaultNotices() { return { topbar: '', topbarUntil: '', paused: false, pauseMessage: 'We’re not taking new orders right now. Message us on WhatsApp and we’ll let you know when we reopen.', closedDates: [], noticeDays: 2 }; }
-function fresh() { return { v: 1, seq: 1000, menu: defaultMenu(), orders: [], settings: defaultSettings(), bake: {}, offers: [], markets: [], notices: defaultNotices() }; }
+function fresh() { return { v: 1, seq: 1000, menu: defaultMenu(), orders: [], settings: defaultSettings(), bake: {}, offers: [], markets: [], notices: defaultNotices(), sections: null }; }
 var store = (function () { try { var t = '__t'; localStorage.setItem(t, t); localStorage.removeItem(t); return localStorage; } catch (e) { var mem = {}; return { getItem: function (k) { return mem[k] || null; }, setItem: function (k, v) { mem[k] = String(v); }, removeItem: function (k) { delete mem[k]; } }; } })();
 function load() {
   try {
     var d = JSON.parse(store.getItem(KEY));
-    if (d && d.menu && d.orders) { d.settings = Object.assign(defaultSettings(), d.settings || {}); d.bake = d.bake || {}; d.offers = d.offers || []; d.markets = d.markets || []; d.notices = Object.assign(defaultNotices(), d.notices || {}); return d; }
+    if (d && d.menu && d.orders) { d.settings = Object.assign(defaultSettings(), d.settings || {}); d.bake = d.bake || {}; d.offers = d.offers || []; d.markets = d.markets || []; d.notices = Object.assign(defaultNotices(), d.notices || {}); d.sections = d.sections || null; return d; }
   } catch (e) {}
   return fresh();
 }
@@ -144,13 +121,27 @@ function fromRow(r) {
     date: r.order_date || '', slot: known ? slot : 'other', slotOther: known ? '' : slot, address: r.address || '', fee: r.fee == null ? '' : String(+r.fee),
     notes: r.notes || '', paid: !!r.paid, paidAmount: r.paid_amount == null ? 0 : +r.paid_amount, items: Array.isArray(r.items) ? r.items : [], createdAt: Date.parse(r.created_at) || 0, updatedAt: Date.parse(r.updated_at) || 0 };
 }
-function toMenuRow(it, i) { return { id: it.id, cat: it.cat, name: it.name, description: it.description || null, allergens: it.allergens || [], options: it.options || [], includes: it.includes || [], active: it.active !== false, seasonal: !!it.seasonal, sort: i == null ? (it.sort || 0) : i }; }
-function fromMenuRow(r) { return { id: r.id, cat: r.cat, name: r.name, description: r.description || '', allergens: Array.isArray(r.allergens) ? r.allergens : [], options: r.options || [], includes: r.includes || [], active: !!r.active, seasonal: !!r.seasonal, sort: r.sort || 0 }; }
+function toMenuRow(it, i) { return { id: it.id, cat: it.cat, name: it.name, description: it.description || null, allergens: it.allergens || [], badge: it.badge || null, tags: it.tags || [], options: it.options || [], includes: it.includes || [], active: it.active !== false, seasonal: !!it.seasonal, sort: i == null ? (it.sort || 0) : i }; }
+function fromMenuRow(r) { return { id: r.id, cat: r.cat, name: r.name, description: r.description || '', allergens: Array.isArray(r.allergens) ? r.allergens : [], badge: r.badge || '', tags: Array.isArray(r.tags) ? r.tags : [], options: r.options || [], includes: r.includes || [], active: !!r.active, seasonal: !!r.seasonal, sort: r.sort || 0 }; }
 function newId() { try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {} return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }); }
 function fromOfferRow(r) { return { id: r.id, title: r.title || '', details: r.details || '', percentOff: r.percent_off == null ? '' : +r.percent_off, amountOff: r.amount_off == null ? '' : +r.amount_off, itemIds: Array.isArray(r.item_ids) ? r.item_ids : [], startsOn: r.starts_on || '', endsOn: r.ends_on || '', active: r.active !== false, sort: r.sort || 0 }; }
 function toOfferRow(o) { return { id: o.id, title: o.title, details: o.details || null, percent_off: o.percentOff === '' || o.percentOff == null ? null : num(o.percentOff), amount_off: o.amountOff === '' || o.amountOff == null ? null : num(o.amountOff), item_ids: o.itemIds || [], starts_on: o.startsOn || null, ends_on: o.endsOn || null, active: !!o.active, sort: o.sort || 0 }; }
-function fromMarketRow(r) { return { id: r.id, name: r.name || '', place: r.place || '', address: r.address || '', mapsUrl: r.maps_url || '', repeat: r.repeat || 'once', weekday: r.weekday == null ? 6 : +r.weekday, date: r.market_date || '', startTime: r.start_time || '', endTime: r.end_time || '', startsOn: r.starts_on || '', endsOn: r.ends_on || '', skipDates: Array.isArray(r.skip_dates) ? r.skip_dates : [], notes: r.notes || '', active: r.active !== false, sort: r.sort || 0 }; }
-function toMarketRow(m) { return { id: m.id, name: m.name, place: m.place || null, address: m.address || null, maps_url: m.mapsUrl || null, repeat: m.repeat, weekday: m.repeat === 'weekly' ? m.weekday : null, market_date: m.repeat === 'once' ? (m.date || null) : null, start_time: m.startTime || null, end_time: m.endTime || null, starts_on: m.startsOn || null, ends_on: m.endsOn || null, skip_dates: m.skipDates || [], notes: m.notes || null, active: !!m.active, sort: m.sort || 0 }; }
+function fromMarketRow(r) {
+  var legacyDays = r.repeat === 'weekly' && r.weekday != null ? [+r.weekday] : [];
+  var once = r.repeat === 'once' && r.market_date;
+  var st = r.status || (once ? (r.market_date >= today() ? 'upcoming' : 'past') : 'active');
+  return { id: r.id, name: r.name || '', kind: r.kind || 'Market', status: st, place: r.place || '', address: r.address || '', mapsUrl: r.maps_url || '',
+    days: Array.isArray(r.days) && r.days.length ? r.days.map(Number) : legacyDays, startTime: r.start_time || '', endTime: r.end_time || '',
+    startsOn: r.starts_on || (once ? r.market_date : ''), endsOn: r.ends_on || (once ? r.market_date : ''), skipDates: Array.isArray(r.skip_dates) ? r.skip_dates : [],
+    notes: r.notes || '', description: r.description || '', active: r.active !== false, sort: r.sort || 0 };
+}
+function toMarketRow(m) {
+  var days = (m.days || []).map(Number), single = !days.length && m.startsOn && m.startsOn === m.endsOn;
+  return { id: m.id, name: m.name, kind: m.kind || 'Market', status: m.status || 'active', place: m.place || null, address: m.address || null, maps_url: m.mapsUrl || null,
+    days: days, repeat: days.length ? 'weekly' : single ? 'once' : 'regular', weekday: days.length ? days[0] : null, market_date: single ? m.startsOn : null,
+    start_time: m.startTime || null, end_time: m.endTime || null, starts_on: m.startsOn || null, ends_on: m.endsOn || null, skip_dates: m.skipDates || [],
+    notes: m.notes || null, description: m.description || null, active: !!m.active, sort: m.sort || 0 };
+}
 function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
 function upsertLocalOrder(o) { var ex = getOrder(o.id); if (ex) Object.assign(ex, o); else db.orders.push(o); }
 function netMsg(e) {
@@ -196,7 +187,7 @@ function pull() {
     net.siteReady = !res[3].error && !res[4].error && !res[5].error;
     if (!res[3].error) db.offers = res[3].data.map(fromOfferRow);
     if (!res[4].error) db.markets = res[4].data.map(fromMarketRow);
-    if (!res[5].error) res[5].data.forEach(function (row) { if (row.key === 'notices') db.notices = Object.assign(defaultNotices(), row.value || {}); });
+    if (!res[5].error) res[5].data.forEach(function (row) { if (row.key === 'notices') db.notices = Object.assign(defaultNotices(), row.value || {}); else if (row.key === 'sections' && Array.isArray(row.value)) db.sections = row.value; });
     db.orders = res[0].data.map(fromRow);
     if (res[1].data.length) db.menu = res[1].data.map(fromMenuRow);
     else { db.menu = defaultMenu(); sb.from('menu_items').upsert(db.menu.map(toMenuRow)).then(function () {}); }
@@ -227,7 +218,7 @@ function subscribe() {
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'offers' }, function (p) { liveList('offers', fromOfferRow, p); })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'markets' }, function (p) { liveList('markets', fromMarketRow, p); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'site_content' }, function (p) { if (p.new && p.new.key === 'notices') { db.notices = Object.assign(defaultNotices(), p.new.value || {}); save(); softRender(); } })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'site_content' }, function (p) { if (p.new && p.new.key === 'notices') { db.notices = Object.assign(defaultNotices(), p.new.value || {}); save(); softRender(); } else if (p.new && p.new.key === 'sections') { db.sections = p.new.value || null; save(); softRender(); } })
     .subscribe(function (st) { if (st === 'SUBSCRIBED') pull(); });
 }
 function liveList(name, from, p) {
@@ -241,7 +232,7 @@ function softRender(force) {
   var r = curRoute().split('/')[1] || '';
   var a = document.activeElement;
   var typing = a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'checkbox' && a.dataset.field !== 'q') || a.tagName === 'SELECT');
-  if (!force && (r === 'new' || r === 'edit' || r === 'offer' || r === 'market' || r === 'notices' || (r === 'menu' && curRoute().split('/')[2]) || typing)) { var b = document.querySelector('.tabs'); if (b && r !== 'new' && r !== 'edit') b.outerHTML = tabsHtml(r); return; }
+  if (!force && (r === 'new' || r === 'edit' || r === 'offer' || r === 'market' || r === 'bundle' || r === 'notices' || (r === 'menu' && curRoute().split('/')[2]) || typing)) { var b = document.querySelector('.tabs'); if (b && r !== 'new' && r !== 'edit') b.outerHTML = tabsHtml(r); return; }
   if (!document.getElementById('modal').hidden) { if (force) closeModal(); else { ui.pendingRender = true; return; } }
   rerender();
 }
@@ -272,12 +263,21 @@ function offerFor(itemId) { var best = null, bestCut = 0; (db.offers || []).forE
 function offerPrice(price, of) { if (!of || !price) return price; var p = num(of.percentOff) > 0 ? price * (1 - num(of.percentOff) / 100) : price - num(of.amountOff); return Math.max(0, Math.round(p * 100) / 100); }
 /* Markets: the next dates a market is on. */
 function marketDates(m, count) {
-  var out = [], t = today();
-  if (m.repeat === 'once') { if (m.date && m.date >= t) out.push(m.date); return out; }
-  var d = parseIso(m.startsOn && m.startsOn > t ? m.startsOn : t), guard = 0;
-  while (d.getDay() !== +m.weekday && guard++ < 7) d.setDate(d.getDate() + 1);
-  for (var i = 0; out.length < (count || 4) && i < 60; i++) { var s = iso(d); if (m.endsOn && s > m.endsOn) break; if ((m.skipDates || []).indexOf(s) < 0) out.push(s); d.setDate(d.getDate() + 7); }
+  var out = [], t = today(), days = (m.days || []).map(Number);
+  if (!days.length) { if (m.startsOn && m.startsOn >= t && (!m.endsOn || m.endsOn === m.startsOn)) out.push(m.startsOn); return out; }
+  var d = parseIso(m.startsOn && m.startsOn > t ? m.startsOn : t);
+  for (var i = 0; out.length < (count || 4) && i < 180; i++) {
+    var s = iso(d); if (m.endsOn && s > m.endsOn) break;
+    if (days.indexOf(d.getDay()) >= 0 && (m.skipDates || []).indexOf(s) < 0) out.push(s);
+    d.setDate(d.getDate() + 1);
+  }
   return out;
+}
+function daysText(days) {
+  days = (days || []).map(Number); if (!days.length) return '';
+  if (days.length === 7) return 'Every day';
+  var order = [1, 2, 3, 4, 5, 6, 0], names = order.filter(function (d) { return days.indexOf(d) >= 0; }).map(function (d) { return days.length === 1 ? 'Every ' + DAYS_LONG[d] : DAYS[d]; });
+  return names.join(', ');
 }
 function timeText(m) { var f = function (x) { if (!x) return ''; var h = +x.split(':')[0], mi = x.split(':')[1]; return (h % 12 || 12) + (mi && mi !== '00' ? ':' + mi : '') + (h < 12 ? 'am' : 'pm'); }; return m.startTime ? f(m.startTime) + (m.endTime ? '–' + f(m.endTime) : '') : ''; }
 function moneySummary(list) {
@@ -319,13 +319,13 @@ function sampleOrders() {
   }
   return [
     mk('Priya Nair', '087 000 1101', 'website', [L('birthday-bundle')], 'delivery', 3, '7–8 pm', 'pending', false, 'D15 AB12', null, 'Rasmalai flavour, buttercream. On cake: Happy 5th Birthday Aarav'),
-    mk('Ciara Byrne', '086 000 2202', 'whatsapp', [L('cookie-pistachio', 0, 2)], 'collection', 2, '6–7 pm', 'pending'),
-    mk('Ananya Rao', '089 000 3303', 'instagram', [L('diwali-hamper', 0, 3)], 'delivery', 4, '8–9 pm', 'pending', false, 'D08 XY12'),
-    mk('Seán Murphy', '085 000 4404', 'whatsapp', [L('tiramisu', 1)], 'collection', 1, '5–6 pm', 'confirmed', true),
+    mk('Ciara Byrne', '086 000 2202', 'whatsapp', [L('pistachio-nyc-cookie', 0, 2)], 'collection', 2, '6–7 pm', 'pending'),
+    mk('Ananya Rao', '089 000 3303', 'instagram', [L('diwali-delights', 0, 3)], 'delivery', 4, '8–9 pm', 'pending', false, 'D08 XY12'),
+    mk('Seán Murphy', '085 000 4404', 'whatsapp', [L('classic-tiramisu', 1)], 'collection', 1, '5–6 pm', 'confirmed', true),
     mk('Meera Shah', '087 000 5505', 'website', [L('dessert-duo')], 'delivery', 1, '9–10 pm', 'confirmed', false, 'D06 K2P4', 5),
-    mk('Aoife Kelly', '083 000 6606', 'whatsapp', [L('basque'), L('cookie-chocochip')], 'collection', 0, '6–7 pm', 'ready', true),
-    mk('Arjun Menon', '087 000 7707', 'phone', [L('cake', 1), L('addon-candles'), L('addon-card')], 'delivery', 0, '8–9 pm', 'confirmed', false, 'D15 X2Y3', 6, 'Chocolate ganache finish, 10 inch'),
-    mk('Niamh Walsh', '086 000 8808', 'instagram', [L('tl-rasmalai')], 'collection', -1, '7–8 pm', 'delivered', true)
+    mk('Aoife Kelly', '083 000 6606', 'whatsapp', [L('classic-vanilla-burnt-basque'), L('og-chocochip-nyc-cookie')], 'collection', 0, '6–7 pm', 'ready', true),
+    mk('Arjun Menon', '087 000 7707', 'phone', [L('belgian-chocolate-cake', 1), L('addon-candle'), L('addon-card')], 'delivery', 0, '8–9 pm', 'confirmed', false, 'D15 X2Y3', 6, 'Chocolate ganache finish, 10 inch'),
+    mk('Niamh Walsh', '086 000 8808', 'instagram', [L('rasmalai-tres-leches')], 'collection', -1, '7–8 pm', 'delivered', true)
   ];
 }
 function hasSamples() { return db.orders.some(function (o) { return o.sample; }); }
@@ -352,7 +352,7 @@ function draftHasContent(d) { return d && (d.name || d.phone || (d.items && d.it
 
 /* ---------- UI shell ---------- */
 var app = document.getElementById('app');
-var ui = { ordersTab: 'pending', q: '', day: today(), menuCat: 'Bundles', pickCat: 'Bundles' };
+var ui = { ordersTab: 'pending', q: '', day: today(), menuCat: 'Cookies', pickCat: 'Bundles' };
 
 function tabsHtml(cur) {
   var pend = db.orders.filter(function (o) { return o.status === 'pending'; }).length;
@@ -411,6 +411,8 @@ function render() {
     else if (r === 'markets') html = viewMarkets();
     else if (r === 'market') html = viewMarketEdit(parts[1] === 'new' ? null : parts[1]);
     else if (r === 'notices') html = viewNotices();
+    else if (r === 'bundle') html = viewBundleEdit(parts[1] === 'new' ? null : parts[1], parts[1] === 'new' ? decodeURIComponent(parts[2] || 'Bundle') : null);
+    else if (r === 'sections') html = viewSections();
     else if (r === 'menu' && parts[1] === 'edit') html = viewMenuEdit(parts[2]);
     else if (r === 'menu' && parts[1] === 'new') html = viewMenuEdit(null);
     else if (r === 'menu') html = viewMenu();
@@ -560,7 +562,7 @@ function viewPicker(key) {
   var cat = ui.pickCat;
   var used = {};
   db.menu.forEach(function (it) { if (it.active) used[it.cat] = 1; });
-  var cats = CATS.filter(function (c) { return used[c]; });
+  var cats = menuCats(true).filter(function (c) { return used[c]; });
   db.menu.forEach(function (it) { if (it.active && cats.indexOf(it.cat) < 0) cats.push(it.cat); });
   if (cats.indexOf(cat) < 0) cat = ui.pickCat = cats[0];
   var inCart = {};
@@ -682,33 +684,33 @@ function viewToday() {
 
 /* ---------- Menu ---------- */
 function viewMenu() {
-  var cat = ui.menuCat;
-  var cats = CATS.slice();
-  db.menu.forEach(function (it) { if (cats.indexOf(it.cat) < 0) cats.push(it.cat); });
+  var cats = menuCats(false), cat = cats.indexOf(ui.menuCat) >= 0 ? ui.menuCat : (ui.menuCat = cats[0]);
   var chips = cats.map(function (c) { var n = db.menu.filter(function (it) { return it.cat === c; }).length; return '<button class="chip" data-act="menuCat" data-v="' + esc(c) + '" aria-pressed="' + (c === cat) + '">' + esc(c) + ' <small>' + n + '</small></button>'; }).join('');
   var rows = db.menu.filter(function (it) { return it.cat === cat; }).map(function (it) {
-    return '<article class="card menu-row' + (it.active ? '' : ' off') + '"><a href="#/menu/edit/' + it.id + '"><span class="nm">' + esc(it.name) + (it.seasonal ? ' <span class="pill p-pending" style="height:20px;font-size:11px">Seasonal</span>' : '') + '</span><span class="pr">' +
+    return '<article class="card menu-row' + (it.active ? '' : ' off') + '"><a href="#/menu/edit/' + it.id + '"><span class="nm">' + esc(it.name) + (it.badge ? ' <span class="pill p-ready" style="height:20px;font-size:11px">' + esc(it.badge) + '</span>' : '') + ((it.tags || []).indexOf('Contains alcohol') >= 0 ? ' <span class="pill p-cancelled" style="height:20px;font-size:11px">Alcohol</span>' : '') + (it.seasonal && !it.badge ? ' <span class="pill p-pending" style="height:20px;font-size:11px">Seasonal</span>' : '') + '</span><span class="pr">' +
       esc(it.options.map(function (o) { return o.label + ' ' + (o.price ? money(o.price) : 'quote'); }).join(' · ')) + '</span>' + (it.allergens && it.allergens.length ? '<span class="pr" style="color:var(--muted);font-size:12px">Contains: ' + esc(it.allergens.join(', ')) + '</span>' : '') + '</a>' +
       '<label class="sw"><input type="checkbox" data-act="menuActive" data-id="' + it.id + '"' + (it.active ? ' checked' : '') + '>' + (it.active ? 'On' : 'Off') + '</label></article>';
   }).join('') || '<div class="empty"><b>No items in ' + esc(cat) + '</b></div>';
-  return siteHeader('menu', '<a class="btn sm" href="#/menu/new">' + I.plus + 'Item</a>', '<div class="chips" role="group" aria-label="Category" style="margin-top:12px">' + chips + '</div>') + '<main><p class="intro">Items switched off are hidden on the website and when adding orders. Hampers and bundles are under Bundles.</p>' + rows + '</main>' + tabsHtml('menu');
+  return siteHeader('menu', '<a class="btn sm ghost" href="#/sections">Sections</a><a class="btn sm" href="#/menu/new">' + I.plus + 'Item</a>', '<div class="chips" role="group" aria-label="Category" style="margin-top:12px">' + chips + '</div>') + '<main><p class="intro">Items switched off are hidden on the website and when adding orders. Bundles, hampers and packs are under Offers. To add a new heading, like “Mini Cookies”, tap Sections.</p>' + rows + '</main>' + tabsHtml('menu');
 }
 function viewMenuEdit(id) {
   var it = id ? getItem(id) : null;
   if (id && !it) { go('#/menu', true); return null; }
+  if (it && it.cat === 'Bundles') { go('#/bundle/' + it.id, true); return null; }
   var v = it || { name: '', cat: ui.menuCat, options: [{ label: 'Pack of 4', price: '' }], includes: [], active: true, seasonal: false };
-  var cats = CATS.slice(); db.menu.forEach(function (x) { if (cats.indexOf(x.cat) < 0) cats.push(x.cat); });
+  var cats = menuCats(false);
   var optRows = v.options.map(function (o, i) {
     return '<div class="opt-row"><input class="input" data-opt="label" data-i="' + i + '" value="' + esc(o.label) + '" placeholder="Size, e.g. Sharing tray" aria-label="Size ' + (i + 1) + '"><label class="price-wrap">€<input class="price-in" inputmode="decimal" data-opt="price" data-i="' + i + '" value="' + esc(o.price) + '" aria-label="Price ' + (i + 1) + '"></label></div>';
   }).join('');
   return topBack(it ? 'Edit item' : 'New item', it ? it.cat : '') +
     '<main class="has-bar"><form id="menuForm" class="card" style="display:flex;flex-direction:column;gap:14px" onsubmit="return false">' +
     '<div class="field"><label for="mName">Name</label><input class="input" id="mName" name="name" value="' + esc(v.name) + '"' + (it ? '' : ' data-autofocus') + '></div>' +
-    '<div class="field"><label for="mCat">Category</label><select class="input" id="mCat" name="cat">' + cats.map(function (c) { return '<option' + (c === v.cat ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field"><label for="mCat">Section</label><select class="input" id="mCat" name="cat">' + cats.map(function (c) { var sx = sections().filter(function (x) { return x.key === c; })[0]; return '<option value="' + esc(c) + '"' + (c === v.cat ? ' selected' : '') + '>' + esc(sx ? sx.title : c) + '</option>'; }).join('') + '</select><span class="hint">Need a new heading? Add it under Menu › Sections first.</span></div>' +
     '<div class="field"><span class="label">Sizes and prices</span><div id="optRows" style="display:flex;flex-direction:column;gap:8px">' + optRows + '</div><button type="button" class="btn sm ghost" data-act="addOptRow">' + I.plus + 'Add a size</button><span class="hint">Leave the price at 0 for “by quote”. Clear a size’s name to remove it.</span></div>' +
     '<div class="field"><label for="mDesc">Description (shown on the website)</label><textarea class="input" id="mDesc" name="description" placeholder="e.g. Rich chocolate brownie with walnuts">' + esc(v.description || '') + '</textarea></div>' +
     '<div class="field"><span class="label">Allergens</span><div class="wrap-chips" id="allergenChips">' + ALLERGENS.map(function (a) { var on = (v.allergens || []).indexOf(a) >= 0; return '<label class="chip" style="cursor:pointer"><input type="checkbox" name="allergen" value="' + a + '"' + (on ? ' checked' : '') + ' style="accent-color:var(--brown)">' + a + '</label>'; }).join('') + '</div><span class="hint">The 14 EU allergens. Shown on the website menu.</span></div>' +
-    '<div class="field"><label for="mInc">What’s inside (bundles)</label><textarea class="input" id="mInc" name="includes" placeholder="One per line, e.g. Brownie · Sharing tray">' + esc((v.includes || []).join('\n')) + '</textarea><span class="hint">Used to build the bake list.</span></div>' +
+    '<div class="field"><label for="mBadge">Badge on the website (optional)</label><input class="input" id="mBadge" name="badge" list="badgeList" value="' + esc(v.badge || '') + '" placeholder="e.g. Best seller"><datalist id="badgeList">' + BADGES.concat(['Save €3', 'Save €4']).map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist></div>' +
+    '<label class="check"><input type="checkbox" name="alcohol"' + ((v.tags || []).indexOf('Contains alcohol') >= 0 ? ' checked' : '') + '>Contains alcohol</label>' +
     '<label class="check"><input type="checkbox" name="seasonal"' + (v.seasonal ? ' checked' : '') + '>Seasonal item</label>' +
     '<label class="check"><input type="checkbox" name="active"' + (v.active ? ' checked' : '') + '>Available for orders</label>' +
     '</form>' + (it ? '<button class="btn danger block" data-act="menuDelete" data-id="' + it.id + '">Delete item</button>' : '') +
@@ -738,15 +740,88 @@ function siteHeader(cur, right, extra) {
     (CLOUD && net.user && net.siteReady === false && cur !== 'menu' ? '<div class="setup-warn" role="alert">Offers, markets and notices need the latest setup code in Supabase. Run it in the SQL Editor, then tap Refresh on the More page.</div>' : '');
 }
 function viewOffers() {
+  var bundles = db.menu.filter(function (it) { return it.cat === 'Bundles'; });
+  var bcards = bundles.map(function (it) {
+    var ty = bundleType(it), p = (it.options[0] || {}).price;
+    return '<article class="card menu-row' + (it.active ? '' : ' off') + '"><a href="#/bundle/' + it.id + '"><span class="nm">' + esc(it.name) + ' <span class="pill ' + (ty === 'Hamper' ? 'p-pending' : ty === 'Pack' ? 'p-ready' : 'p-confirmed') + '" style="height:20px;font-size:11px">' + ty + '</span>' + (it.badge ? ' <span class="pill p-delivered" style="height:20px;font-size:11px">' + esc(it.badge) + '</span>' : '') + '</span>' +
+      '<span class="pr">' + (p ? money(p) : 'No price') + ' · ' + (it.includes || []).length + ' line' + ((it.includes || []).length === 1 ? '' : 's') + '</span>' +
+      '<span class="pr" style="color:var(--muted);font-size:12px">' + esc((it.includes || []).slice(0, 3).join(' · ') + ((it.includes || []).length > 3 ? ' …' : '')) + '</span></a>' +
+      '<label class="sw"><input type="checkbox" data-act="menuActive" data-id="' + it.id + '"' + (it.active ? ' checked' : '') + '>' + (it.active ? 'On site' : 'Hidden') + '</label></article>';
+  }).join('') || '<div class="card" style="font-size:14px;color:var(--muted)">No bundles yet.</div>';
   var list = db.offers.slice().sort(function (a, b) { return (b.startsOn || '').localeCompare(a.startsOn || ''); });
-  var cards = list.map(function (of) {
+  var dcards = list.map(function (of) {
     var st = offerState(of), n = (of.itemIds || []).length;
     return '<article class="card menu-row' + (of.active ? '' : ' off') + '"><a href="#/offer/' + of.id + '"><span class="nm">' + esc(of.title) + ' <span class="pill ' + st[1] + '" style="height:20px;font-size:11px">' + esc(st[0]) + '</span></span>' +
       '<span class="pr">' + esc(offerLabel(of)) + (n ? ' · ' + n + ' item' + (n > 1 ? 's' : '') : ' · shown on the website only') + '</span>' +
       '<span class="pr" style="color:var(--muted);font-size:12px">' + esc((of.startsOn ? fmtDate(of.startsOn, true) : 'From now') + ' – ' + (of.endsOn ? fmtDate(of.endsOn, true) : 'no end date')) + '</span></a>' +
       '<label class="sw"><input type="checkbox" data-act="offerActive" data-id="' + of.id + '"' + (of.active ? ' checked' : '') + '>' + (of.active ? 'On' : 'Off') + '</label></article>';
-  }).join('') || '<div class="empty"><b>No offers yet</b><p>Create an offer to show it on the website. If you pick items, the discount is also applied when you add them to an order.</p></div>';
-  return siteHeader('offers', '<a class="btn sm" href="#/offer/new">' + I.plus + 'Offer</a>') + '<main>' + cards + '</main>' + tabsHtml('menu');
+  }).join('') || '<div class="card" style="font-size:14px;color:var(--muted)">No discounts running. Nothing shows on the website until you add one.</div>';
+  return siteHeader('offers', '<button class="btn sm" data-act="offerNew">' + I.plus + 'New</button>') +
+    '<main><div class="section-title">Bundles, hampers &amp; packs <small>' + bundles.length + '</small></div>' + bcards +
+    '<div class="section-title">Discounts <small>' + list.length + '</small></div>' + dcards + '</main>' + tabsHtml('menu');
+}
+function bundleType(it) { var t = it.tags || []; return t.indexOf('Hamper') >= 0 ? 'Hamper' : t.indexOf('Pack') >= 0 ? 'Pack' : 'Bundle'; }
+function viewBundleEdit(id, type) {
+  var it = id ? getItem(id) : null;
+  if (id && !it) { go('#/offers', true); return null; }
+  var key = id || 'new:' + (type || 'Bundle');
+  if (!ui.bDraft || ui.bDraft._for !== key) {
+    ui.bDraft = it ? { type: bundleType(it), name: it.name, description: it.description || '', price: (it.options[0] || {}).price || '', badge: it.badge || '', seasonal: !!it.seasonal, active: it.active !== false,
+      lines: (it.includes || []).map(function (s) { var mm = String(s).match(/^(\d+)\s*[×x]\s*(.+)$/); return mm ? { qty: +mm[1], text: mm[2] } : { qty: 1, text: s }; }) }
+      : { type: type || 'Bundle', name: '', description: '', price: '', badge: '', seasonal: type === 'Hamper', active: true, lines: [{ qty: 1, text: '' }, { qty: 1, text: '' }] };
+    if (!ui.bDraft.lines.length) ui.bDraft.lines.push({ qty: 1, text: '' });
+    ui.bDraft._for = key;
+  }
+  var v = ui.bDraft;
+  var types = ['Bundle', 'Hamper', 'Pack'].map(function (t) { return '<button type="button" data-act="bType" data-v="' + t + '" aria-pressed="' + (v.type === t) + '">' + t + '</button>'; }).join('');
+  var lines = v.lines.map(function (l, i) {
+    return '<div class="opt-row"><label class="sr" for="blq' + i + '">Quantity ' + (i + 1) + '</label><input class="input" id="blq' + i + '" style="width:64px;flex:none;text-align:center" inputmode="numeric" data-bl="qty" data-i="' + i + '" value="' + esc(l.qty) + '">' +
+      '<label class="sr" for="blt' + i + '">Item ' + (i + 1) + '</label><input class="input" id="blt' + i + '" data-bl="text" data-i="' + i + '" value="' + esc(l.text) + '" placeholder="e.g. Pack of 4 Chocochip NYC cookies">' +
+      '<button type="button" class="icon-btn" data-act="blDel" data-i="' + i + '" aria-label="Remove line ' + (i + 1) + '">' + I.x + '</button></div>';
+  }).join('');
+  return topBack(it ? 'Edit ' + v.type.toLowerCase() : 'New ' + v.type.toLowerCase(), 'Website › Offers') +
+    '<main class="has-bar"><form id="bundleForm" class="card" style="display:flex;flex-direction:column;gap:14px" onsubmit="return false">' +
+    '<div class="field"><span class="label">Type</span><div class="toggle" role="group" aria-label="Type">' + types + '</div></div>' +
+    '<div class="field"><label for="bName">Name</label><input class="input" id="bName" data-bd="name" value="' + esc(v.name) + '" placeholder="e.g. Movie Night Box"' + (it ? '' : ' data-autofocus') + '></div>' +
+    '<div class="field"><label for="bDesc">Short description</label><textarea class="input" id="bDesc" data-bd="description" placeholder="e.g. Cookies and brownies to share, in one order.">' + esc(v.description) + '</textarea></div>' +
+    '<div class="field"><span class="label">What’s inside</span><span class="hint">Type each line yourself: how many, and what.</span><div style="display:flex;flex-direction:column;gap:8px">' + lines + '</div><button type="button" class="btn sm ghost" data-act="blAdd">' + I.plus + 'Add a line</button></div>' +
+    '<div class="grid2"><div class="field"><label for="bPrice">Price (€)</label><input class="input" id="bPrice" inputmode="decimal" data-bd="price" value="' + esc(v.price) + '"></div><div class="field"><label for="bBadge">Badge (optional)</label><input class="input" id="bBadge" data-bd="badge" list="bBadgeList" value="' + esc(v.badge) + '" placeholder="e.g. Save €4"><datalist id="bBadgeList"><option value="Save €3"><option value="Save €4"><option value="Season special"><option value="Best seller"></datalist></div></div>' +
+    '<label class="check"><input type="checkbox" data-bd="seasonal"' + (v.seasonal ? ' checked' : '') + '>Seasonal</label>' +
+    '<label class="check"><input type="checkbox" data-bd="active"' + (v.active ? ' checked' : '') + '>Show on the website and when adding orders</label>' +
+    '</form>' + (it ? '<button class="btn danger block" data-act="bundleDelete" data-id="' + it.id + '">Delete ' + v.type.toLowerCase() + '</button>' : '') +
+    '</main><div class="bar"><button class="btn block" data-act="bundleSave" data-id="' + (it ? it.id : '') + '">' + I.check + 'Save ' + v.type.toLowerCase() + '</button></div>';
+}
+/* ---------- Menu sections ---------- */
+var DEFAULT_SECTIONS = [
+  { key: 'Cookies', id: 'cookies', title: 'Chunky NYC Cookies', line: 'Gooey in the middle, crisp at the edges.', active: true },
+  { key: 'Brownies', id: 'brownies', title: 'Brownies', line: 'Fudgy, rich and made to order.', active: true },
+  { key: 'Cheesecakes', id: 'cheesecakes', title: 'Cheesecakes', line: 'Creamy, baked fresh, never from a shelf.', active: true },
+  { key: 'Basque', id: 'basque', title: 'Burnt Basque Cheesecakes', line: 'Burnt on top, silky inside.', active: true },
+  { key: 'Tiramisu', id: 'tiramisu', title: 'Tiramisu', line: 'Layered by hand and set overnight.', active: true },
+  { key: 'Tres Leches', id: 'tresleches', title: 'Tres Leches', line: 'Soaked in three milks, topped with fruit.', active: true },
+  { key: 'Savoury', id: 'savoury', title: 'Savoury Bakes', line: 'Savoury bakes with an Indian and global twist.', active: true },
+  { key: 'Cakes', id: 'cakes', title: 'Celebration Cakes', line: 'Celebration cakes, made your way.', active: true }];
+function sections() { return db.sections && db.sections.length ? db.sections : DEFAULT_SECTIONS; }
+function menuCats(withBundles) {
+  var out = sections().map(function (x) { return x.key; });
+  db.menu.forEach(function (it) { if (it.cat !== 'Bundles' && it.cat !== 'Add-ons' && out.indexOf(it.cat) < 0) out.push(it.cat); });
+  out.push('Add-ons'); if (withBundles) out.unshift('Bundles');
+  return out;
+}
+function saveSections(list, undo) {
+  var before = db.sections; db.sections = list;
+  remote(CLOUD && sb.from('site_content').upsert({ key: 'sections', value: list }), function () { db.sections = before; if (undo) undo(); });
+}
+function viewSections() {
+  var list = sections();
+  var cards = list.map(function (x, i) {
+    var n = db.menu.filter(function (it) { return it.cat === x.key; }).length;
+    return '<article class="card" style="display:flex;gap:10px;align-items:center' + (x.active === false ? ';opacity:.6' : '') + '"><div class="grow" style="display:flex;flex-direction:column;gap:3px"><span style="font-weight:700;font-size:15px">' + esc(x.title) + '</span><span style="font-size:13px;color:#4A3218">Tab: ' + esc(x.key) + ' · ' + n + ' item' + (n === 1 ? '' : 's') + (x.active === false ? ' · hidden' : '') + '</span>' + (x.line ? '<span style="font-size:12px;color:var(--muted)">' + esc(x.line) + '</span>' : '') + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px"><button class="icon-btn" data-act="secMove" data-i="' + i + '" data-v="-1" aria-label="Move ' + esc(x.title) + ' up"' + (i === 0 ? ' disabled' : '') + '>▲</button><button class="icon-btn" data-act="secMove" data-i="' + i + '" data-v="1" aria-label="Move ' + esc(x.title) + ' down"' + (i === list.length - 1 ? ' disabled' : '') + '>▼</button></div>' +
+      '<button class="btn sm ghost" data-act="secEdit" data-i="' + i + '">Edit</button></article>';
+  }).join('');
+  return topBack('Menu sections', 'Website › Menu', '<button class="btn sm" data-act="secEdit" data-i="-1">' + I.plus + 'Section</button>') +
+    '<main><p class="intro">Sections are the headings on the website menu, like “Chunky NYC Cookies”. The order here is the order on the website.</p>' + cards + '</main>';
 }
 function viewOfferEdit(id) {
   var of = id ? byId(db.offers, id) : null;
@@ -762,8 +837,8 @@ function viewOfferEdit(id) {
   }).join('');
   return topBack(of ? 'Edit offer' : 'New offer', 'Website › Offers') +
     '<main class="has-bar"><form id="offerForm" class="card" style="display:flex;flex-direction:column;gap:14px" onsubmit="return false">' +
-    '<div class="field"><label for="oTitle">Offer name</label><input class="input" id="oTitle" name="title" value="' + esc(v.title) + '" placeholder="e.g. Diwali week: 15% off Tres Leches"' + (of ? '' : ' data-autofocus') + '></div>' +
-    '<div class="field"><label for="oDetails">Details for the website</label><textarea class="input" id="oDetails" name="details" placeholder="e.g. Order by Friday for collection on the weekend.">' + esc(v.details) + '</textarea></div>' +
+    '<div class="field"><label for="oTitle">Offer name</label><input class="input" id="oTitle" name="title" value="' + esc(v.title) + '" placeholder="e.g. Christmas week offer"' + (of ? '' : ' data-autofocus') + '></div>' +
+    '<div class="field"><label for="oDetails">Details for the website</label><textarea class="input" id="oDetails" name="details" placeholder="e.g. Order by Friday for the weekend.">' + esc(v.details) + '</textarea></div>' +
     '<div class="field"><span class="label">Discount</span><div class="toggle" role="group" aria-label="Discount type"><button type="button" data-act="offerKind" data-v="percent" aria-pressed="' + (ui.offerKind === 'percent') + '">% off</button><button type="button" data-act="offerKind" data-v="amount" aria-pressed="' + (ui.offerKind === 'amount') + '">€ off each</button></div>' +
       '<input class="input" id="oValue" name="value" inputmode="decimal" value="' + esc(ui.offerKind === 'amount' ? v.amountOff : v.percentOff) + '" placeholder="' + (ui.offerKind === 'amount' ? 'e.g. 5' : 'e.g. 15') + '" aria-label="Discount amount"><span class="hint">Leave empty for a message-only offer, such as “Free candles with every cake”.</span></div>' +
     '<div class="grid2"><div class="field"><label for="oStart">Starts</label><input class="input" id="oStart" name="startsOn" type="date" value="' + esc(v.startsOn) + '"></div><div class="field"><label for="oEnd">Ends</label><input class="input" id="oEnd" name="endsOn" type="date" value="' + esc(v.endsOn) + '"></div></div>' +
@@ -773,36 +848,46 @@ function viewOfferEdit(id) {
     '</main><div class="bar"><button class="btn block" data-act="offerSave" data-id="' + (of ? of.id : '') + '">' + I.check + 'Save offer</button></div>';
 }
 function viewMarkets() {
-  var list = db.markets.slice().sort(function (a, b) { return (marketDates(a, 1)[0] || '9').localeCompare(marketDates(b, 1)[0] || '9'); });
-  var cards = list.map(function (m) {
-    var next = marketDates(m, 4), tt = timeText(m);
-    return '<article class="card menu-row' + (m.active ? '' : ' off') + '"><a href="#/market/' + m.id + '"><span class="nm">' + esc(m.name) + (m.repeat === 'weekly' ? ' <span class="pill p-ready" style="height:20px;font-size:11px">Every ' + DAYS_LONG[m.weekday] + '</span>' : '') + '</span>' +
-      '<span class="pr">' + esc([m.place, tt].filter(Boolean).join(' · ') || 'Add the place and times') + '</span>' +
-      '<span class="pr" style="color:var(--muted);font-size:12px">' + (next.length ? 'Next: ' + esc(next.map(function (x) { return fmtDate(x, true); }).join(', ')) : 'No upcoming dates') + '</span></a>' +
-      '<label class="sw"><input type="checkbox" data-act="marketActive" data-id="' + m.id + '"' + (m.active ? ' checked' : '') + '>' + (m.active ? 'On' : 'Off') + '</label></article>';
-  }).join('') || '<div class="empty"><b>No markets yet</b><p>Add the markets and events where customers can find you. They show on the website with the next dates.</p></div>';
-  return siteHeader('markets', '<a class="btn sm" href="#/market/new" data-act="mkNew">' + I.plus + 'Market</a>') + '<main>' + cards + '</main>' + tabsHtml('menu');
+  var groups = [['active', 'Trading now', 'Shown on the website under “Where we’re trading”.'], ['upcoming', 'Upcoming', 'Shown on the website under “Coming up”.'], ['past', 'Past', 'Shown on the website in “Our story” only.']];
+  var html = groups.map(function (g) {
+    var list = db.markets.filter(function (m) { return (m.status || 'active') === g[0]; }).sort(function (a, b) {
+      if (g[0] === 'past') return (b.endsOn || b.startsOn || '').localeCompare(a.endsOn || a.startsOn || '') || (a.sort || 0) - (b.sort || 0);
+      return (marketDates(a, 1)[0] || '9').localeCompare(marketDates(b, 1)[0] || '9') || (a.sort || 0) - (b.sort || 0);
+    });
+    var cards = list.map(function (m) {
+      var next = m.status === 'past' ? [] : marketDates(m, 3), tt = timeText(m), when = daysText(m.days);
+      var range = m.startsOn || m.endsOn ? (m.startsOn ? fmtDate(m.startsOn, true) : '') + (m.endsOn && m.endsOn !== m.startsOn ? ' – ' + fmtDate(m.endsOn, true) : '') : '';
+      return '<article class="card menu-row' + (m.active ? '' : ' off') + '"><a href="#/market/' + m.id + '"><span class="nm">' + esc(m.name) + ' <span class="pill p-delivered" style="height:20px;font-size:11px">' + esc(m.kind || 'Market') + '</span></span>' +
+        '<span class="pr">' + esc([when, tt].filter(Boolean).join(' · ') || (m.status === 'past' ? '' : 'No fixed days')) + (m.place ? (when || tt ? ' · ' : '') + esc(m.place.split(',')[0]) : '') + '</span>' +
+        (next.length ? '<span class="pr" style="color:var(--muted);font-size:12px">Next: ' + esc(next.map(function (x) { return fmtDate(x, true); }).join(', ')) + '</span>' : range ? '<span class="pr" style="color:var(--muted);font-size:12px">' + esc(range) + '</span>' : '') + '</a>' +
+        '<label class="sw"><input type="checkbox" data-act="marketActive" data-id="' + m.id + '"' + (m.active ? ' checked' : '') + '>' + (m.active ? 'On site' : 'Hidden') + '</label></article>';
+    }).join('');
+    return '<div class="section-title">' + g[1] + ' <small>' + list.length + '</small></div><p class="intro" style="margin-top:-6px">' + g[2] + '</p>' + (cards || '<div class="card" style="font-size:14px;color:var(--muted)">None yet.</div>');
+  }).join('');
+  return siteHeader('markets', '<a class="btn sm" href="#/market/new" data-act="mkNew">' + I.plus + 'Market</a>') + '<main>' + html + '</main>' + tabsHtml('menu');
 }
 function viewMarketEdit(id) {
   var m = id ? byId(db.markets, id) : null;
   if (id && !m) { go('#/markets', true); return null; }
-  if (!ui.mDraft || ui.mDraft._for !== (id || 'new')) { ui.mDraft = JSON.parse(JSON.stringify(m || { name: '', place: '', address: '', mapsUrl: '', repeat: 'weekly', weekday: 6, date: '', startTime: '10:00', endTime: '16:00', startsOn: '', endsOn: '', skipDates: [], notes: '', active: true })); ui.mDraft._for = id || 'new'; }
+  if (!ui.mDraft || ui.mDraft._for !== (id || 'new')) { ui.mDraft = JSON.parse(JSON.stringify(m || { name: '', kind: 'Market', status: 'active', place: '', address: '', mapsUrl: '', days: [6], startTime: '10:00', endTime: '16:00', startsOn: '', endsOn: '', skipDates: [], notes: '', description: '', active: true })); ui.mDraft._for = id || 'new'; }
   var v = ui.mDraft;
-  var days = DAYS_LONG.map(function (dn, i) { return '<option value="' + i + '"' + (+v.weekday === i ? ' selected' : '') + '>' + dn + '</option>'; }).join('');
+  var dayBtns = [1, 2, 3, 4, 5, 6, 0].map(function (d) { var on = (v.days || []).indexOf(d) >= 0; return '<button type="button" class="chip" data-act="dayToggle" data-v="' + d + '" aria-pressed="' + on + '">' + DAYS[d] + '</button>'; }).join('');
   var skips = (v.skipDates || []).slice().sort().map(function (x) { return '<span class="chip">' + esc(fmtDate(x, true)) + '<button type="button" class="chip-x" data-act="skipDel" data-v="' + x + '" aria-label="Remove ' + esc(fmtDate(x, true)) + '">' + I.x + '</button></span>'; }).join('');
+  var st = [['active', 'Trading now'], ['upcoming', 'Upcoming'], ['past', 'Past']].map(function (x) { return '<button type="button" data-act="mkStatus" data-v="' + x[0] + '" aria-pressed="' + (v.status === x[0]) + '">' + x[1] + '</button>'; }).join('');
+  var kinds = ['Market', 'Festival', 'Community'].map(function (k) { return '<option value="' + k + '"' + (v.kind === k ? ' selected' : '') + '>' + (k === 'Community' ? 'Community event' : k) + '</option>'; }).join('');
   return topBack(m ? 'Edit market' : 'New market', 'Website › Markets') +
     '<main class="has-bar"><form id="marketForm" class="card" style="display:flex;flex-direction:column;gap:14px" onsubmit="return false">' +
-    '<div class="field"><label for="mkName">Market name</label><input class="input" id="mkName" data-mk="name" value="' + esc(v.name) + '" placeholder="e.g. Temple Bar Food Market"' + (m ? '' : ' data-autofocus') + '></div>' +
-    '<div class="field"><label for="mkPlace">Place</label><input class="input" id="mkPlace" data-mk="place" value="' + esc(v.place) + '" placeholder="e.g. Meeting House Square"></div>' +
-    '<div class="field"><label for="mkAddr">Address or Eircode (for directions)</label><input class="input" id="mkAddr" data-mk="address" value="' + esc(v.address) + '" placeholder="e.g. Meeting House Square, Temple Bar, Dublin 2"></div>' +
-    '<div class="field"><span class="label">How often</span><div class="toggle" role="group" aria-label="How often"><button type="button" data-act="mkRepeat" data-v="weekly" aria-pressed="' + (v.repeat === 'weekly') + '">Every week</button><button type="button" data-act="mkRepeat" data-v="once" aria-pressed="' + (v.repeat === 'once') + '">One date</button></div></div>' +
-    (v.repeat === 'weekly' ?
-      '<div class="field"><label for="mkDay">Day</label><select class="input" id="mkDay" data-mk="weekday">' + days + '</select></div>' +
-      '<div class="grid2"><div class="field"><label for="mkFrom">From (optional)</label><input class="input" id="mkFrom" type="date" data-mk="startsOn" value="' + esc(v.startsOn) + '"></div><div class="field"><label for="mkTo">Until (optional)</label><input class="input" id="mkTo" type="date" data-mk="endsOn" value="' + esc(v.endsOn) + '"></div></div>' +
-      '<div class="field"><span class="label">Weeks you’re not there</span><div class="wrap-chips">' + (skips || '<span class="hint">None</span>') + '</div><div class="opt-row"><label class="sr" for="mkSkip">Date to skip</label><input class="input" id="mkSkip" type="date"><button type="button" class="btn sm ghost" data-act="skipAdd">Skip date</button></div></div>'
-      : '<div class="field"><label for="mkDate">Date</label><input class="input" id="mkDate" type="date" data-mk="date" value="' + esc(v.date) + '"></div>') +
+    '<div class="field"><label for="mkName">Name</label><input class="input" id="mkName" data-mk="name" value="' + esc(v.name) + '" placeholder="e.g. Meeting House Square Food & Farmers Market"' + (m ? '' : ' data-autofocus') + '></div>' +
+    '<div class="grid2"><div class="field"><label for="mkKind">Type</label><select class="input" id="mkKind" data-mk="kind">' + kinds + '</select></div><div class="field"><label for="mkPlace">Place</label><input class="input" id="mkPlace" data-mk="place" value="' + esc(v.place) + '" placeholder="e.g. Temple Bar, Dublin 2"></div></div>' +
+    '<div class="field"><span class="label">Status</span><div class="toggle" role="group" aria-label="Status">' + st + '</div></div>' +
+    '<div class="field"><span class="label">Days</span><div class="wrap-chips" role="group" aria-label="Days">' + dayBtns + '</div><span class="hint">Leave all unticked if there are no fixed days.</span></div>' +
     '<div class="grid2"><div class="field"><label for="mkStart">Opens</label><input class="input" id="mkStart" type="time" data-mk="startTime" value="' + esc(v.startTime) + '"></div><div class="field"><label for="mkEnd">Closes</label><input class="input" id="mkEnd" type="time" data-mk="endTime" value="' + esc(v.endTime) + '"></div></div>' +
-    '<div class="field"><label for="mkNotes">Note for the website (optional)</label><textarea class="input" id="mkNotes" data-mk="notes" placeholder="e.g. Pre-order and collect at our stall">' + esc(v.notes) + '</textarea></div>' +
+    '<div class="grid2"><div class="field"><label for="mkFrom">From date (optional)</label><input class="input" id="mkFrom" type="date" data-mk="startsOn" value="' + esc(v.startsOn) + '"></div><div class="field"><label for="mkTo">Until date (optional)</label><input class="input" id="mkTo" type="date" data-mk="endsOn" value="' + esc(v.endsOn) + '"></div></div>' +
+    '<span class="hint" style="margin-top:-8px">For a one-day event, put the same date in both.</span>' +
+    ((v.days || []).length ? '<div class="field"><span class="label">Dates you’re not there</span><div class="wrap-chips">' + (skips || '<span class="hint">None</span>') + '</div><div class="opt-row"><label class="sr" for="mkSkip">Date to skip</label><input class="input" id="mkSkip" type="date"><button type="button" class="btn sm ghost" data-act="skipAdd">Skip date</button></div></div>' : '') +
+    '<div class="field"><label for="mkAddr">Address or Eircode (for directions)</label><input class="input" id="mkAddr" data-mk="address" value="' + esc(v.address) + '" placeholder="e.g. Meeting House Square, Temple Bar, Dublin 2"></div>' +
+    '<div class="field"><label for="mkNotes">Short note (optional)</label><input class="input" id="mkNotes" data-mk="notes" value="' + esc(v.notes) + '" placeholder="e.g. Pre-order on WhatsApp"></div>' +
+    '<div class="field"><label for="mkDesc">For “Our story” on the website</label><textarea class="input" id="mkDesc" data-mk="description" placeholder="One or two sentences about this market">' + esc(v.description) + '</textarea></div>' +
     '<label class="check"><input type="checkbox" data-mk="active"' + (v.active ? ' checked' : '') + '>Show on the website</label>' +
     '</form>' + (m ? '<button class="btn danger block" data-act="marketDelete" data-id="' + m.id + '">Delete market</button>' : '') +
     '</main><div class="bar"><button class="btn block" data-act="marketSave" data-id="' + (m ? m.id : '') + '">' + I.check + 'Save market</button></div>';
@@ -884,6 +969,61 @@ function deleteRowFrom(list, table, id) {
 }
 var SITE_ACT = {
   mkNew: function () { ui.mDraft = null; },
+  offerNew: function () {
+    modal({ title: 'What would you like to add?', buttons: [
+      { label: 'Discount (% or € off)', fn: function () { ui.offerFor = null; go('#/offer/new'); } },
+      { label: 'Bundle', kind: 'ghost', fn: function () { ui.bDraft = null; go('#/bundle/new/Bundle'); } },
+      { label: 'Hamper', kind: 'ghost', fn: function () { ui.bDraft = null; go('#/bundle/new/Hamper'); } },
+      { label: 'Pack', kind: 'ghost', fn: function () { ui.bDraft = null; go('#/bundle/new/Pack'); } },
+      { label: 'Cancel', kind: 'ghost' }] });
+  },
+  bType: function (el) { ui.bDraft.type = el.dataset.v; rerender(); },
+  blAdd: function () { ui.bDraft.lines.push({ qty: 1, text: '' }); rerender(); var f = $('#blt' + (ui.bDraft.lines.length - 1)); if (f) f.focus(); },
+  blDel: function (el) { ui.bDraft.lines.splice(+el.dataset.i, 1); if (!ui.bDraft.lines.length) ui.bDraft.lines.push({ qty: 1, text: '' }); rerender(); },
+  bundleSave: function (el) {
+    var v = ui.bDraft, name = String(v.name || '').trim(), price = num(v.price);
+    var lines = v.lines.filter(function (l) { return String(l.text || '').trim(); }).map(function (l) { var q = Math.max(1, parseInt(l.qty, 10) || 1); return (q > 1 ? q + ' × ' : '') + String(l.text).trim(); });
+    if (!name) { toast('Give it a name'); return; }
+    if (!lines.length) { toast('Add at least one line to what’s inside'); return; }
+    if (!(price > 0)) { toast('Add the price'); return; }
+    var it = el.dataset.id ? getItem(el.dataset.id) : null, isNew = !it, before = it ? JSON.parse(JSON.stringify(it)) : null;
+    if (!it) { var base = name.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'bundle', idv = base, k = 2; while (getItem(idv)) idv = base + '-' + k++; it = { id: idv, cat: 'Bundles', allergens: [], sort: -1 }; }
+    var tags = (it.tags || []).filter(function (x) { return x !== 'Hamper' && x !== 'Pack'; }); if (v.type !== 'Bundle') tags.push(v.type);
+    Object.assign(it, { name: name, description: String(v.description || '').trim(), options: [{ label: v.type, price: price }], includes: lines, badge: String(v.badge || '').trim(), tags: tags, seasonal: !!v.seasonal, active: !!v.active });
+    if (isNew) { var firstNon = db.menu.findIndex(function (x) { return x.cat !== 'Bundles'; }); it.sort = db.menu.filter(function (x) { return x.cat === 'Bundles'; }).length; db.menu.splice(firstNon < 0 ? db.menu.length : firstNon, 0, it); }
+    remote(CLOUD && sb.from('menu_items').upsert(toMenuRow(it)), function () { if (isNew) db.menu = db.menu.filter(function (x) { return x !== it; }); else Object.assign(it, before); });
+    ui.bDraft = null; toast('Saved ' + name); back('#/offers');
+  },
+  bundleDelete: function (el) { ask('Delete this bundle?', 'It disappears from the website. Orders already saved keep their items.', 'Delete', function () { var before = db.menu.slice(); db.menu = db.menu.filter(function (x) { return x.id !== el.dataset.id; }); remote(CLOUD && sb.from('menu_items').delete().eq('id', el.dataset.id), function () { db.menu = before; }); ui.bDraft = null; back('#/offers'); }, 'danger'); },
+  secMove: function (el) { var list = sections().slice(), i = +el.dataset.i, j = i + (+el.dataset.v); if (j < 0 || j >= list.length) return; var t = list[i]; list[i] = list[j]; list[j] = t; saveSections(list); rerender(); },
+  secEdit: function (el) {
+    var i = +el.dataset.i, list = sections().slice(), x = i >= 0 ? list[i] : { key: '', title: '', line: '', active: true };
+    var n = i >= 0 ? db.menu.filter(function (it) { return it.cat === x.key; }).length : 0;
+    var btns = [{ label: i >= 0 ? 'Save section' : 'Add section', fn: function () {
+      var key = $('#sKey').value.trim(), title = $('#sTitle').value.trim() || key, line = $('#sLine').value.trim(), on = $('#sOn').checked;
+      if (!key) { toast('Add a tab name'); return false; }
+      if (key === 'Bundles' || key === 'Add-ons' || list.some(function (y, k) { return k !== i && y.key.toLowerCase() === key.toLowerCase(); })) { toast('There is already a section called ' + key); return false; }
+      var nx = { key: key, id: x.id || key.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), title: title, line: line, active: on };
+      if (i >= 0 && x.key !== key) {
+        db.menu.forEach(function (it) { if (it.cat === x.key) it.cat = key; });
+        remote(CLOUD && sb.from('menu_items').update({ cat: key }).eq('cat', x.key), function () { db.menu.forEach(function (it) { if (it.cat === key) it.cat = x.key; }); });
+        if (ui.menuCat === x.key) ui.menuCat = key;
+      }
+      if (i >= 0) list[i] = nx; else list.push(nx);
+      saveSections(list); toast(i >= 0 ? 'Section saved' : 'Section added. Add items to it from Menu › + Item'); rerender();
+    } }];
+    if (i >= 0) btns.push({ label: 'Delete section', kind: 'danger', fn: function () {
+      if (n) { toast('Move or delete its ' + n + ' item' + (n > 1 ? 's' : '') + ' first'); return false; }
+      list.splice(i, 1); saveSections(list); toast('Section deleted'); rerender();
+    } });
+    btns.push({ label: 'Cancel', kind: 'ghost' });
+    modal({ title: i >= 0 ? 'Edit section' : 'New section', html:
+      '<div class="field"><label for="sKey">Tab name (short)</label><input class="input" id="sKey" value="' + esc(x.key) + '" placeholder="e.g. Mini Cookies"></div>' +
+      '<div class="field"><label for="sTitle">Heading on the website</label><input class="input" id="sTitle" value="' + esc(x.title) + '" placeholder="e.g. Mini NYC Cookies"></div>' +
+      '<div class="field"><label for="sLine">One-line description</label><input class="input" id="sLine" value="' + esc(x.line || '') + '" placeholder="e.g. Bite-sized, baked fresh to order."></div>' +
+      '<label class="check"><input type="checkbox" id="sOn"' + (x.active !== false ? ' checked' : '') + '>Show on the website</label>' +
+      (x.id === 'cakes' ? '<p class="hint" style="margin:0">This section uses the cake builder on the website.</p>' : ''), buttons: btns });
+  },
   offerKind: function (el) { ui.offerKind = el.dataset.v; var f = $('#oValue'); if (f) { f.placeholder = el.dataset.v === 'amount' ? 'e.g. 5' : 'e.g. 15'; } [].forEach.call(el.parentNode.children, function (b) { b.setAttribute('aria-pressed', b === el); }); },
   offerActive: function (el) { var of = byId(db.offers, el.dataset.id), v = el.checked; of.active = v; remote(CLOUD && sb.from('offers').update({ active: v }).eq('id', of.id), function () { of.active = !v; }); rerender(); },
   offerSave: function (el) {
@@ -902,18 +1042,19 @@ var SITE_ACT = {
   },
   offerDelete: function (el) { ask('Delete this offer?', 'It disappears from the website. Orders already saved keep their prices.', 'Delete offer', function () { deleteRowFrom('offers', 'offers', el.dataset.id); back('#/offers'); }, 'danger'); },
   marketActive: function (el) { var m = byId(db.markets, el.dataset.id), v = el.checked; m.active = v; remote(CLOUD && sb.from('markets').update({ active: v }).eq('id', m.id), function () { m.active = !v; }); rerender(); },
-  mkRepeat: function (el) { ui.mDraft.repeat = el.dataset.v; rerender(); },
+  mkStatus: function (el) { ui.mDraft.status = el.dataset.v; rerender(); },
+  dayToggle: function (el) { var d = +el.dataset.v, a = ui.mDraft.days || (ui.mDraft.days = []), i = a.indexOf(d); if (i >= 0) a.splice(i, 1); else a.push(d); rerender(); },
   skipAdd: function () { var x = $('#mkSkip').value; if (!x) { toast('Pick a date first'); return; } if (ui.mDraft.skipDates.indexOf(x) < 0) ui.mDraft.skipDates.push(x); rerender(); },
   skipDel: function (el) { ui.mDraft.skipDates = ui.mDraft.skipDates.filter(function (x) { return x !== el.dataset.v; }); rerender(); },
   marketSave: function (el) {
     var v = ui.mDraft;
     if (!String(v.name || '').trim()) { toast('Give the market a name'); return; }
-    if (v.repeat === 'once' && !v.date) { toast('Pick the date'); return; }
     if (v.startsOn && v.endsOn && v.endsOn < v.startsOn) { toast('The “until” date is before the “from” date'); return; }
+    if (v.startTime && v.endTime && v.endTime <= v.startTime) { toast('The closing time is before the opening time'); return; }
     var m = el.dataset.id ? byId(db.markets, el.dataset.id) : null, isNew = !m, before = m ? JSON.parse(JSON.stringify(m)) : null;
     if (!m) m = { id: newId(), sort: db.markets.length };
-    var copy = JSON.parse(JSON.stringify(v)); delete copy._for; copy.id = m.id; copy.sort = m.sort; copy.name = copy.name.trim(); copy.weekday = +copy.weekday;
-    copy.mapsUrl = copy.address ? mapsUrl(copy.address) : '';
+    var copy = JSON.parse(JSON.stringify(v)); delete copy._for; copy.id = m.id; copy.sort = m.sort; copy.name = copy.name.trim();
+    copy.days = (copy.days || []).map(Number).sort(); copy.mapsUrl = copy.address ? mapsUrl(copy.address) : '';
     Object.assign(m, copy);
     saveRowTo('markets', 'markets', toMarketRow, m, isNew, before);
     ui.mDraft = null; toast('Saved ' + m.name); back('#/markets');
@@ -1071,12 +1212,16 @@ var ACT = {
     if (!name) { toast('Give the item a name'); return; }
     var opts = [];
     var labels = form.querySelectorAll('[data-opt=label]'), prices = form.querySelectorAll('[data-opt=price]');
-    for (var i = 0; i < labels.length; i++) { var lb = labels[i].value.trim(); if (lb) opts.push({ label: lb, price: num(prices[i].value) }); }
+    var oldIt = el.dataset.id ? getItem(el.dataset.id) : null, notes = {};
+    if (oldIt) (oldIt.options || []).forEach(function (o) { if (o.note) notes[o.label] = o.note; });
+    for (var i = 0; i < labels.length; i++) { var lb = labels[i].value.trim(); if (lb) { var op = { label: lb, price: num(prices[i].value) }; if (notes[lb]) op.note = notes[lb]; opts.push(op); } }
     if (!opts.length) opts.push({ label: 'Each', price: 0 });
     var it = el.dataset.id ? getItem(el.dataset.id) : null, isNew = !it, before = it ? JSON.parse(JSON.stringify(it)) : null;
     if (!it) { it = { id: uid(), sort: db.menu.length }; db.menu.push(it); }
-    it.name = name; it.cat = f['cat'].value; it.options = opts; it.includes = f['includes'].value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    it.name = name; it.cat = f['cat'].value; it.options = opts; it.includes = it.includes || [];
     it.seasonal = f['seasonal'].checked; it.active = f['active'].checked;
+    it.badge = f['badge'].value.trim();
+    var tg = (it.tags || []).filter(function (x) { return x !== 'Contains alcohol' && x !== 'Hamper'; }); if (f['alcohol'].checked) tg.push('Contains alcohol'); if ((before && before.tags || []).indexOf('Hamper') >= 0) tg.push('Hamper'); it.tags = tg;
     it.description = f['description'].value.trim(); it.allergens = [].slice.call(form.querySelectorAll('input[name=allergen]:checked')).map(function (x) { return x.value; });
     remote(CLOUD && sb.from('menu_items').upsert(toMenuRow(it)), function () { if (isNew) db.menu = db.menu.filter(function (x) { return x !== it; }); else Object.assign(it, before); });
     ui.menuCat = it.cat; toast('Saved ' + name); back('#/menu');
@@ -1190,7 +1335,7 @@ document.addEventListener('click', function (e) {
   }
   if (e.target.id === 'modal') { closeModal(); return; }
   var rep = e.target.closest('a[data-replace]');
-  if (rep) { e.preventDefault(); ui.nDraft = null; ui.mDraft = null; go(rep.getAttribute('href'), true); return; }
+  if (rep) { e.preventDefault(); ui.nDraft = null; ui.mDraft = null; ui.bDraft = null; go(rep.getAttribute('href'), true); return; }
   var el = e.target.closest('[data-act]');
   var link = e.target.closest('a[href^="#/"]');
   if (link && MEM) { e.preventDefault(); if (el && ACT[el.dataset.act]) ACT[el.dataset.act](el, e); go(link.getAttribute('href')); return; }
@@ -1218,6 +1363,8 @@ document.addEventListener('input', function (e) {
   if (t.dataset.line != null && draft) { draft.items[+t.dataset.line].price = t.value; saveDraft(); var tt = $('#fTotal'); if (tt) tt.textContent = totalLabel(draft); }
   if (t.dataset.setting) { db.settings[t.dataset.setting] = t.value; saveMessagesSoon(); }
   if (t.dataset.mk && ui.mDraft) ui.mDraft[t.dataset.mk] = t.type === 'checkbox' ? t.checked : t.value;
+  if (t.dataset.bd && ui.bDraft) ui.bDraft[t.dataset.bd] = t.type === 'checkbox' ? t.checked : t.value;
+  if (t.dataset.bl && ui.bDraft) ui.bDraft.lines[+t.dataset.i][t.dataset.bl] = t.value;
   if (t.dataset.nt && ui.nDraft) { ui.nDraft[t.dataset.nt] = t.type === 'checkbox' ? t.checked : t.value; if (t.dataset.nt === 'paused') rerender(); }
 });
 document.addEventListener('change', function (e) {
@@ -1228,7 +1375,14 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d
 document.addEventListener('submit', function (e) { if (e.target.id === 'loginForm') { e.preventDefault(); ACT.login(); } });
 
 /* ---------- start ---------- */
-if (window.SBS_PREVIEW && !db.orders.length && !store.getItem('sbs.preview.seeded')) { db.orders = sampleOrders(); save(); try { store.setItem('sbs.preview.seeded', '1'); } catch (e) {} }
+if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded5')) {
+  db.orders = sampleOrders();
+  db.orders[3].paidAmount = 20; db.orders[3].paid = false;
+  var t0 = today();
+  db.offers = [];
+  db.markets = [{"name": "Meeting House Square Food & Farmers Market", "kind": "Market", "status": "active", "place": "Temple Bar, Dublin 2", "address": "Meeting House Square, Temple Bar, Dublin 2", "days": [6], "startTime": "10:00", "endTime": "", "skipDates": ["2026-11-07"], "notes": "Pre-order on WhatsApp", "description": "Saturday crowds, warm cookies and plenty of new faces in the heart of Dublin."}, {"name": "Portobello Market", "kind": "Market", "status": "active", "place": "We Love Market, Portobello", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the Portobello market, run by the We Love Market team."}, {"name": "Boland's Mills Market", "kind": "Market", "status": "active", "place": "We Love Market, Grand Canal Dock", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at Boland's Mills, one of Dublin's best-known spots."}, {"name": "The Digital Hub Market", "kind": "Market", "status": "active", "place": "We Love Market, The Liberties", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at the Digital Hub, with fresh bakes for the teams and neighbours around it."}, {"name": "Taste of Dublin", "kind": "Festival", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall among the city's best food names, sharing our handmade bakes with thousands of food lovers."}, {"name": "Mountain View Market", "kind": "Market", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A friendly neighbourhood market where regulars started coming back every week."}, {"name": "Ireland Telugu Association", "kind": "Community", "status": "past", "place": "Community events", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Festival and community events with the Telugu community, with bakes that taste like home."}, {"name": "Cheese & Wine Festival", "kind": "Festival", "status": "past", "place": "The Bernard Shaw, Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A weekend of tastings and pairings at The Bernard Shaw, with our sweet side of the table."}].map(function (m, k) { return Object.assign({ id: newId(), mapsUrl: m.address ? mapsUrl(m.address) : '', startsOn: '', endsOn: '', active: true, sort: k }, m); });
+  save(); try { store.setItem('sbs.preview.seeded5', '1'); } catch (e) {}
+}
 if (!MEM && !location.hash) { try { history.replaceState(null, '', '#/orders'); } catch (e) {} }
 if (CLOUD) {
   sb = window.supabase.createClient(window.SBS_CONFIG.url, window.SBS_CONFIG.key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'sbs.auth' } });
