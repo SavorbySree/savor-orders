@@ -1,5 +1,5 @@
 /* Lets the app open without internet once it has been loaded (iPhone / browser install). */
-var CACHE = 'sbs-orders-v6';
+var CACHE = 'sbs-orders-v7';
 var FILES = ['./', 'index.html', 'app.css', 'app.js', 'manifest.json', 'config.js', 'supabase.js', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png', 'logo.jpg', 'pattern.jpg',
   'montserrat-latin-400-normal.woff2', 'montserrat-latin-500-normal.woff2', 'montserrat-latin-600-normal.woff2', 'montserrat-latin-700-normal.woff2'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); })); self.skipWaiting(); });

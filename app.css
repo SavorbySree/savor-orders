@@ -233,3 +233,30 @@ dl{margin:0}
   .side-brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--brown);font-size:18px;padding:4px 6px 20px}
   .side-brand img{width:52px;height:52px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(79,42,0,.18)}
 }
+.p-part{background:#E4ECFB;color:#1D3F8F}
+.paygrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.paygrid div{background:var(--cream);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.paygrid small{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.paygrid b{font-size:16px;font-variant-numeric:tabular-nums;word-break:break-word}
+.paygrid .ok{color:var(--green)} .paygrid .due{color:var(--warn)}
+.section-title .pill{margin-left:auto}
+.owe{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.owe:first-child{border-top:0}
+.owe b{display:block;font-size:14px}.owe small{font-size:12px;color:var(--muted)}
+.stat b{font-variant-numeric:tabular-nums}
+#allergenChips .chip{height:40px}
+/* Website section */
+.segnav{display:flex;gap:4px;margin-top:12px;background:var(--cream);border:1.5px solid var(--line);border-radius:14px;padding:4px;overflow-x:auto;scrollbar-width:none}
+.segnav::-webkit-scrollbar{display:none}
+.segl{flex:1;min-width:max-content;height:38px;padding:0 12px;border-radius:10px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--brown);font-size:13px;font-weight:700}
+.segl[aria-current=page]{background:var(--brown);color:#fff}
+.intro{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+.setup-warn{margin:12px 16px 0;padding:12px 14px;border-radius:12px;background:var(--red-bg);color:var(--red);font-size:13px;font-weight:600;line-height:1.45}
+.offer-tag{display:inline-block;margin-top:3px;font-size:11px;font-weight:700;color:var(--green);background:var(--green-bg);border-radius:999px;padding:2px 8px}
+.pick-opt s{color:var(--muted);font-weight:500;margin-right:2px}
+.chip-x{border:0;background:transparent;color:inherit;width:28px;height:28px;margin-right:-8px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%}
+.chip-x svg{width:14px;height:14px}
+@media (min-width:900px){.setup-warn{max-width:1056px;margin:16px auto 0}}
+.bar.over-tabs{bottom:calc(70px + var(--safe-bottom));padding-bottom:12px;box-shadow:0 -6px 16px rgba(79,42,0,.06)}
+main.has-tabs-bar{padding-bottom:calc(180px + var(--safe-bottom))}
+@media (min-width:900px){.bar.over-tabs{bottom:0;left:232px}main.has-tabs-bar{padding-bottom:130px}}
