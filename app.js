@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.4.0';
+var VERSION = '2.4.1';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -509,6 +509,7 @@ function viewDetail(id) {
       '<div class="btns">' + (pendingAmt(o) > 0 ? '<button class="btn sm" data-act="payAdd" data-id="' + o.id + '">' + I.plus + 'Record payment</button><button class="btn sm ghost" data-act="payFull" data-id="' + o.id + '">Paid in full</button>'
         : '<button class="btn sm ghost" data-act="payReset" data-id="' + o.id + '">Change payment</button>') + '</div></section>' +
     '<section class="card" style="display:flex;flex-direction:column;gap:10px"><div class="section-title" style="margin:0">Message the customer</div>' + msgs + '</section>' +
+    '<button class="btn block ghost" data-act="statusPick" data-id="' + o.id + '">Change status</button>' +
     '<div class="btns"><a class="btn ghost" href="#/edit/' + o.id + '">Edit order</a><button class="btn danger" data-act="cancelOrder" data-id="' + o.id + '">' + (o.status === 'cancelled' ? 'Delete' : 'Cancel order') + '</button></div>' +
     (o.status !== 'cancelled' ? '<button class="btn sm ghost" data-act="deleteOrder" data-id="' + o.id + '" style="align-self:center;border:0;color:var(--red);background:transparent">Delete permanently</button>' : '') +
     '<p class="hint" style="text-align:center;font-size:12px;color:var(--muted);margin:0">Added ' + esc(new Date(o.createdAt || Date.now()).toLocaleString('en-IE', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) + '</p>' +
@@ -1092,6 +1093,14 @@ var ACT = {
     var btns = [{ label: 'Send confirmation on WhatsApp', kind: 'wa', icon: I.wa, href: waUrl(o.phone, fillTemplate(db.settings.confirmMsg, o)) }, { label: 'Done', kind: 'ghost' }];
     modal({ title: 'Order confirmed', text: o.name + ' · ' + whenText(o) + (o.phone ? '' : '. No phone number on this order, so WhatsApp will ask you to pick the chat.'), buttons: btns });
     rerender();
+  },
+  statusPick: function (el) {
+    var o = getOrder(el.dataset.id); if (!o) return;
+    var label = function (st) { return st === 'delivered' ? (o.mode === 'delivery' ? 'Delivered' : 'Collected') : STATUS[st]; };
+    modal({ title: 'Change status', text: 'Now: ' + label(o.status) + '. Move it back or forward to any stage.',
+      buttons: ['pending', 'confirmed', 'ready', 'delivered', 'cancelled'].filter(function (st) { return st !== o.status; }).map(function (st) {
+        return { label: label(st), kind: st === 'cancelled' ? 'danger' : 'ghost', fn: function () { setStatus(o, st); toast(o.name + ': ' + label(st)); rerender(); } };
+      }).concat([{ label: 'Keep as it is', kind: 'ghost' }]) });
   },
   status: function (el) {
     var o = getOrder(el.dataset.id); if (!o) return;
