@@ -278,7 +278,8 @@ function payRowsHtml(o, act) {
   return rows.length ? '<div class="pay-list">' + rows.join('') + '</div>' : '';
 }
 /* One editor for every payment: one method, or split across two; date received is optional. */
-function openPayModal(title, text, amount, onSave) {
+function openPayModal(title, text, amount, onSave, opt) {
+  opt = opt || {};
   var chips = function (grp, sel) { return '<div class="wrap-chips" role="group" data-grp="' + grp + '">' + PAY_METHODS.map(function (m) { return '<button type="button" class="chip" data-act="pmPick" data-v="' + m + '" aria-pressed="' + (m === sel) + '">' + m + '</button>'; }).join('') + '</div>'; };
   var amt = Math.round(amount * 100) / 100 || '';
   modal({ title: title, text: text,
@@ -289,9 +290,9 @@ function openPayModal(title, text, amount, onSave) {
         '<div class="field"><span class="label">First method</span>' + chips('a', '') + '<label class="price-wrap wide">€<input class="price-in" id="pmA1" inputmode="decimal" placeholder="Amount" aria-label="First amount"></label></div>' +
         '<div class="field"><span class="label">Second method</span>' + chips('b', '') + '<label class="price-wrap wide">€<input class="price-in" id="pmA2" inputmode="decimal" placeholder="Amount" aria-label="Second amount"></label></div>' +
         '<div class="hint" id="pmSplitTot">Total: ' + money(0) + '</div></div>' +
-      '<div class="field"><label for="pmDate">Date received <small>(optional)</small></label><input class="input" id="pmDate" type="date"></div>' +
+      '<div class="field"><label for="pmDate">Date received <small>(optional)</small></label><input class="input" id="pmDate" type="date" value="' + today() + '"></div>' +
     '</div>',
-    buttons: [{ label: 'Save payment', fn: function () {
+    buttons: [{ label: opt.saveLabel || 'Save payment', fn: function () {
       var pick = function (g) { var b = document.querySelector('[data-grp="' + g + '"] [aria-pressed="true"]'); return b ? b.dataset.v : ''; };
       var split = !$('#pmSplit').hidden, entry;
       if (!split) {
@@ -308,7 +309,7 @@ function openPayModal(title, text, amount, onSave) {
       }
       entry.date = $('#pmDate').value || '';
       onSave(cleanPay(entry));
-    } }, { label: 'Cancel', kind: 'ghost' }] });
+    } }].concat(opt.extra || []).concat([{ label: 'Cancel', kind: 'ghost' }]) });
 }
 function methodTotals(list) {
   var t = {};
@@ -539,7 +540,9 @@ function orderCard(o) {
     '<div class="row">' + sourcePill(o.source) + '<span class="ref">' + esc(o.ref) + '</span><span class="total">' + esc(totalLabel(o)) + '</span></div>' +
     '<div class="who"><span class="avatar" aria-hidden="true">' + esc((o.name || '?').trim().charAt(0).toUpperCase() || '?') + '</span><div class="name">' + esc(o.name || 'No name') + '</div></div><div class="items-line">' + esc(itemsSummary(o)) + '</div>' +
     '<div class="meta">' + I.cal + '<span>' + esc(fmtDate(o.date)) + (slotOf(o) ? ', ' + esc(slotOf(o)) : '') + '</span><span aria-hidden="true">·</span><span>' + (o.mode === 'delivery' ? 'Delivery' : 'Collection') + '</span>' +
-    (o.status !== 'pending' && o.status !== 'cancelled' ? payPill(o, true) : '') + (o.status === 'ready' || o.status === 'cancelled' ? statusPill(o.status) : '') + '</div></a>' + actions + '</article>';
+    (o.status === 'ready' || o.status === 'cancelled' ? statusPill(o.status) : '') + '</div>' +
+    (o.status !== 'cancelled' ? '<div class="money-line"><span>Total <b>' + esc(totalLabel(o)) + '</b></span><span>Collected <b class="ok">' + money(collected(o)) + '</b></span><span>Pending <b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></span></div>' : '') +
+    '</a>' + actions + '</article>';
 }
 
 /* ---------- Order detail ---------- */
@@ -590,6 +593,23 @@ function viewDetail(id) {
 }
 
 /* ---------- Add / edit form ---------- */
+function formPayCard(d) {
+  var head = '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment</div>';
+  var nums = function (got) { return '<div class="paygrid"><div><small>Total</small><b id="fpTot">' + esc(totalLabel(d)) + '</b></div><div><small>Collected</small><b class="ok" id="fpGot">' + money(got) + '</b></div><div><small>Pending</small><b class="due" id="fpDue">' + money(Math.max(0, orderTotal(d) - got)) + '</b></div></div>'; };
+  if (collected(d) > 0) /* payments already recorded on this order */
+    return head + nums(collected(d)) + payRowsHtml(d, 'draftPayRemove') + '<button class="btn block ghost" data-act="draftPayAdd">' + I.plus + 'Add another payment</button></section>';
+  var plan = d.payPlan || 'none', got = plan === 'full' ? orderTotal(d) : plan === 'deposit' ? num(d.payAmt) : 0;
+  var chips = PAY_METHODS.map(function (m) { return '<button type="button" class="chip" data-act="fPayMethod" data-v="' + m + '" aria-pressed="' + (d.payMethod === m) + '">' + m + '</button>'; }).join('');
+  return head +
+    '<div class="toggle three" role="group" aria-label="Payment so far"><button data-act="payPlan" data-v="none" aria-pressed="' + (plan === 'none') + '">Not paid yet</button><button data-act="payPlan" data-v="deposit" aria-pressed="' + (plan === 'deposit') + '">Deposit</button><button data-act="payPlan" data-v="full" aria-pressed="' + (plan === 'full') + '">Paid in full</button></div>' +
+    nums(got) +
+    (plan === 'none' ? '' :
+      (plan === 'deposit' ? '<div class="field"><label for="fPayAmt">Deposit received (€)</label><input class="input" id="fPayAmt" inputmode="decimal" data-draft="payAmt" value="' + esc(d.payAmt || '') + '" placeholder="e.g. 15"></div>' : '') +
+      '<div class="field"><span class="label">Paid by</span><div class="wrap-chips">' + chips + '</div></div>' +
+      '<div class="field"><label for="fPayDate">' + (plan === 'deposit' ? 'Deposit received on' : 'Paid on') + '</label><input class="input" id="fPayDate" type="date" data-draft="payDate" value="' + esc(d.payDate || today()) + '"></div>' +
+      '<p class="hint" style="margin:0">' + (plan === 'deposit' ? 'When you finish the order, the app asks for the balance and how they paid.' : 'Need two methods? Save, then use Record payment on the order.') + '</p>') +
+  '</section>';
+}
 function viewForm(key) {
   var d = ensureDraft(key);
   if (!d) { go('#/orders', true); return null; }
@@ -631,10 +651,7 @@ function viewForm(key) {
       (d.discount ? '<div class="grid2"><div class="field"><label for="fDiscV">' + (d.discount.type === 'percent' ? 'Percent off' : 'Amount off (€)') + '</label><input class="input" id="fDiscV" inputmode="decimal" data-disc="value" value="' + esc(d.discount.value) + '" placeholder="' + (d.discount.type === 'percent' ? 'e.g. 10' : 'e.g. 5') + '"></div>' +
         '<div class="field"><label for="fDiscN">Reason <small>(optional)</small></label><input class="input" id="fDiscN" data-disc="note" value="' + esc(d.discount.note || '') + '" placeholder="e.g. Friends & family"></div></div>' : '') +
     '</section>' +
-    '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment <small>' + (collected(d) > 0 ? money(collected(d)) + ' paid' : 'Nothing paid yet') + '</small></div>' +
-      payRowsHtml(d, 'draftPayRemove') +
-      '<button class="btn block ghost" data-act="draftPayAdd">' + I.plus + (collected(d) > 0 ? 'Add another payment' : 'Record a deposit or payment') + '</button>' +
-    '</section>' +
+    formPayCard(d) +
     '</main><div class="bar"><div class="sum big" style="border:0;margin:0;padding:0"><span>Total</span><span id="fTotal">' + esc(totalLabel(d)) + '</span></div><button class="btn block" data-act="saveOrder">' + I.check + (isNew ? 'Save order' : 'Save changes') + '</button></div>';
 }
 
@@ -1041,6 +1058,20 @@ function cloudSection() {
 }
 
 /* ---------- actions ---------- */
+/* Marking an order done: settle any balance (method + date), or confirm it was paid in full. */
+function finishOrder(o) {
+  var done = o.mode === 'delivery' ? 'Delivered' : 'Collected', due = pendingAmt(o);
+  var finished = function () { toast(o.name + ': ' + done); rerender(); };
+  if (due > 0) {
+    openPayModal('Finish order · balance due', o.name + ' · ' + money(collected(o)) + ' paid of ' + totalLabel(o) + '. Record the remaining ' + money(due) + ' and how they paid.', due, function (x) {
+      setPaid(o, collected(o) + x.amount, (o.payments || []).concat([x]), 'delivered'); finished();
+    }, { saveLabel: 'Save payment and finish', extra: [{ label: 'Finish, balance still due', kind: 'ghost', fn: function () { setStatus(o, 'delivered'); finished(); } }] });
+    return;
+  }
+  var how = (o.payments || []).map(function (x) { return money(x.amount) + ' ' + payMethodText(x) + (x.date ? ' (' + fmtDate(x.date) + ')' : ''); }).join(', ');
+  modal({ title: 'Finish order', text: o.name + ' · paid in full: ' + money(collected(o)) + (how ? '. ' + how : '') + '.', buttons: [
+    { label: 'Mark ' + done.toLowerCase(), fn: function () { setStatus(o, 'delivered'); finished(); } }, { label: 'Cancel', kind: 'ghost' }] });
+}
 function setStatus(o, st) {
   var prev = o.status; o.status = st; o.updatedAt = Date.now();
   remote(CLOUD && sb.from('orders').update({ status: st }).eq('id', o.id).select().single(), function () { o.status = prev; }, function (row) { if (row) upsertLocalOrder(fromRow(row)); });
@@ -1156,12 +1187,12 @@ var SITE_ACT = {
     ui.nDraft = null; toast('Notices saved'); rerender();
   }
 };
-function setPaid(o, amount, payments) {
-  var prevA = o.paidAmount, prevP = o.paid, prevL = o.payments;
-  if (payments) o.payments = payments;
+function setPaid(o, amount, payments, status) {
+  var prevA = o.paidAmount, prevP = o.paid, prevL = o.payments, prevS = o.status;
+  if (payments) o.payments = payments; if (status) o.status = status;
   o.paidAmount = Math.round(amount * 100) / 100; o.paid = isPaid(o); o.updatedAt = Date.now();
-  var upd = { paid_amount: o.paidAmount, paid: o.paid }; if (net.v25 || !CLOUD) upd.payments = toRow(o, ['payments']).payments;
-  remote(CLOUD && sb.from('orders').update(upd).eq('id', o.id), function () { o.paidAmount = prevA; o.paid = prevP; o.payments = prevL; });
+  var upd = { paid_amount: o.paidAmount, paid: o.paid }; if (net.v25 || !CLOUD) upd.payments = toRow(o, ['payments']).payments; if (status) upd.status = status;
+  remote(CLOUD && sb.from('orders').update(upd).eq('id', o.id), function () { o.paidAmount = prevA; o.paid = prevP; o.payments = prevL; o.status = prevS; });
   rerender(); toast(o.paid ? o.name + ' · paid in full' : money(o.paidAmount) + ' collected · ' + money(pendingAmt(o)) + ' pending');
 }
 function deleteOrder(o, done) {
@@ -1186,11 +1217,12 @@ var ACT = {
     var label = function (st) { return st === 'delivered' ? (o.mode === 'delivery' ? 'Delivered' : 'Collected') : STATUS[st]; };
     modal({ title: 'Change status', text: 'Now: ' + label(o.status) + '. Move it back or forward to any stage.',
       buttons: ['pending', 'confirmed', 'ready', 'delivered', 'cancelled'].filter(function (st) { return st !== o.status; }).map(function (st) {
-        return { label: label(st), kind: st === 'cancelled' ? 'danger' : 'ghost', fn: function () { setStatus(o, st); toast(o.name + ': ' + label(st)); rerender(); } };
+        return { label: label(st), kind: st === 'cancelled' ? 'danger' : 'ghost', fn: function () { if (st === 'delivered') { setTimeout(function () { finishOrder(o); }, 0); return; } setStatus(o, st); toast(o.name + ': ' + label(st)); rerender(); } };
       }).concat([{ label: 'Keep as it is', kind: 'ghost' }]) });
   },
   status: function (el) {
     var o = getOrder(el.dataset.id); if (!o) return;
+    if (el.dataset.v === 'delivered') return finishOrder(o);
     setStatus(o, el.dataset.v);
     toast(o.name + ': ' + STATUS[el.dataset.v]);
     rerender();
@@ -1212,6 +1244,8 @@ var ACT = {
       setPaid(o, left, list);
     }, 'danger');
   },
+  payPlan: function (el) { draft.payPlan = el.dataset.v; if (!draft.payDate) draft.payDate = today(); saveDraft(); rerender(); if (el.dataset.v === 'deposit') setTimeout(function () { var f = $('#fPayAmt'); if (f) f.focus(); }, 30); },
+  fPayMethod: function (el) { draft.payMethod = el.dataset.v; saveDraft(); rerender(); },
   draftPayAdd: function () {
     var d = draft; openPayModal('Record a payment', 'Total ' + totalLabel(d) + (collected(d) > 0 ? ' · ' + money(collected(d)) + ' already paid' : ''), pendingAmt(d), function (x) {
       d.payments = (d.payments || []).concat([x]); d.paidAmount = Math.round((num(d.paidAmount) + x.amount) * 100) / 100; saveDraft(); rerender();
@@ -1292,6 +1326,15 @@ var ACT = {
     var d = draft;
     if (!d.name.trim()) { toast('Add the customer’s name'); $('#fName') && $('#fName').focus(); return; }
     if (!d.items.length) { toast('Add at least one item'); return; }
+    if (collected(d) <= 0 && (d.payPlan === 'deposit' || d.payPlan === 'full')) {
+      var pa = d.payPlan === 'full' ? orderTotal(d) : num(d.payAmt);
+      if (!(pa > 0)) { toast('Enter the deposit amount'); $('#fPayAmt') && $('#fPayAmt').focus(); return; }
+      if (pa > orderTotal(d) + 0.001) { toast('The deposit is more than the order total'); return; }
+      if (!d.payMethod) { toast('Pick how they paid'); return; }
+      d.payments = [cleanPay({ amount: pa, date: d.payDate || today(), parts: [{ method: d.payMethod, amount: pa }] })];
+      d.paidAmount = Math.round(pa * 100) / 100;
+    }
+    d.paid = isPaid(d);
     if (CLOUD) {
       if (ui.saving) return;
       ui.saving = true; if (el) { el.disabled = true; el.lastChild.textContent = 'Saving…'; }
@@ -1487,6 +1530,10 @@ document.addEventListener('input', function (e) {
     var tot = $('#fTotal'); if (tot) tot.textContent = totalLabel(draft);
   }
   if (t.id === 'pmA1' || t.id === 'pmA2') { var st = $('#pmSplitTot'); if (st) st.textContent = 'Total: ' + money(num($('#pmA1').value) + num($('#pmA2').value)); }
+  if (draft && (t.id === 'fPayAmt' || t.dataset.disc || t.dataset.line != null)) setTimeout(function () {
+    var got = draft.payPlan === 'full' ? orderTotal(draft) : draft.payPlan === 'deposit' ? num(draft.payAmt) : collected(draft);
+    var a = $('#fpTot'), b = $('#fpGot'), c = $('#fpDue'); if (a) a.textContent = totalLabel(draft); if (b) b.textContent = money(got); if (c) c.textContent = money(Math.max(0, orderTotal(draft) - got));
+  }, 0);
   if (t.dataset.disc && draft && draft.discount) { draft.discount[t.dataset.disc] = t.value; saveDraft(); var ft = $('#fTotal'); if (ft) ft.textContent = totalLabel(draft); var fd = $('#fDisc'); if (fd) fd.textContent = discountAmt(draft) ? '−' + money(discountAmt(draft)) : ''; }
   if (t.dataset.line != null && draft) { draft.items[+t.dataset.line].price = t.value; saveDraft(); var tt = $('#fTotal'); if (tt) tt.textContent = totalLabel(draft); }
   if (t.dataset.setting) { db.settings[t.dataset.setting] = t.value; saveMessagesSoon(); }
@@ -1503,14 +1550,14 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d
 document.addEventListener('submit', function (e) { if (e.target.id === 'loginForm') { e.preventDefault(); ACT.login(); } });
 
 /* ---------- start ---------- */
-if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded6')) {
+if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded7')) {
   db.orders = sampleOrders();
   db.orders[3].paidAmount = 20; db.orders[3].paid = false; db.orders[3].payments = [{ amount: 20, date: today(), parts: [{ method: 'Revolut', amount: 20 }] }];
   if (db.orders[2]) { db.orders[2].discount = { type: 'percent', value: 10, note: 'Friends & family' }; }
   var t0 = today();
   db.offers = [];
   db.markets = [{"name": "Meeting House Square Food & Farmers Market", "kind": "Market", "status": "active", "place": "Temple Bar, Dublin 2", "address": "Meeting House Square, Temple Bar, Dublin 2", "days": [6], "startTime": "10:00", "endTime": "", "skipDates": ["2026-11-07"], "notes": "Pre-order on WhatsApp", "description": "Saturday crowds, warm cookies and plenty of new faces in the heart of Dublin."}, {"name": "Portobello Market", "kind": "Market", "status": "active", "place": "We Love Market, Portobello", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the Portobello market, run by the We Love Market team."}, {"name": "Boland's Mills Market", "kind": "Market", "status": "active", "place": "We Love Market, Grand Canal Dock", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at Boland's Mills, one of Dublin's best-known spots."}, {"name": "The Digital Hub Market", "kind": "Market", "status": "active", "place": "We Love Market, The Liberties", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at the Digital Hub, with fresh bakes for the teams and neighbours around it."}, {"name": "Taste of Dublin", "kind": "Festival", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall among the city's best food names, sharing our handmade bakes with thousands of food lovers."}, {"name": "Mountain View Market", "kind": "Market", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A friendly neighbourhood market where regulars started coming back every week."}, {"name": "Ireland Telugu Association", "kind": "Community", "status": "past", "place": "Community events", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Festival and community events with the Telugu community, with bakes that taste like home."}, {"name": "Cheese & Wine Festival", "kind": "Festival", "status": "past", "place": "The Bernard Shaw, Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A weekend of tastings and pairings at The Bernard Shaw, with our sweet side of the table."}].map(function (m, k) { return Object.assign({ id: newId(), mapsUrl: m.address ? mapsUrl(m.address) : '', startsOn: '', endsOn: '', active: true, sort: k }, m); });
-  save(); try { store.setItem('sbs.preview.seeded6', '1'); } catch (e) {}
+  save(); try { store.setItem('sbs.preview.seeded7', '1'); } catch (e) {}
 }
 if (!MEM && !location.hash) { try { history.replaceState(null, '', '#/orders'); } catch (e) {} }
 if (CLOUD) {

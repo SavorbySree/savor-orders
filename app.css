@@ -329,3 +329,7 @@ html,body{background:#FBF3E8}
 .mchip{display:inline-flex;align-items:baseline;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px}
 .mchip small{font-size:11px;font-weight:700;color:var(--muted)}.mchip b{font-size:13px;font-variant-numeric:tabular-nums}
 .hero .day i.zero{background:transparent}
+.money-line{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.money-line span{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;background:var(--cream);border-radius:10px;padding:6px 9px;font-size:11px;font-weight:600;color:var(--muted)}
+.money-line b{font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+.money-line b.ok{color:var(--green)} .money-line b.due{color:var(--warn)}
