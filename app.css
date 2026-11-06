@@ -333,3 +333,17 @@ html,body{background:#FBF3E8}
 .money-line span{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;background:var(--cream);border-radius:10px;padding:6px 9px;font-size:11px;font-weight:600;color:var(--muted)}
 .money-line b{font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
 .money-line b.ok{color:var(--green)} .money-line b.due{color:var(--warn)}
+/* 2.5.1 simple payment options */
+.pay-opts{display:flex;flex-direction:column;gap:8px}
+.pay-opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;color:var(--ink);background:var(--cream);border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;min-height:64px}
+.pay-opt small{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pay-opt b{display:block;font-size:17px;font-variant-numeric:tabular-nums;margin-top:2px}
+.pay-opt .grow > span{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-top:1px}
+.pay-opt em{font-style:normal;font-weight:700;font-size:13px;color:var(--brown);background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;white-space:nowrap}
+.pay-opt.needs .grow > span{color:var(--warn)}
+.pay-opt.due{background:var(--sun);border-color:#F5D9A8}
+.pay-opt.due em{background:linear-gradient(180deg,#7E4500,#5E3300);color:#fff;border-color:transparent}
+.pay-opt.add b{font-size:15px;color:var(--muted)}
+.pay-fixed{background:var(--sun);border-radius:14px;padding:12px 14px}
+.pay-fixed small{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pay-fixed b{font-size:22px;font-variant-numeric:tabular-nums}

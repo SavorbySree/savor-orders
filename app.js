@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.5.0';
+var VERSION = '2.5.1';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -278,38 +278,46 @@ function payRowsHtml(o, act) {
   return rows.length ? '<div class="pay-list">' + rows.join('') + '</div>' : '';
 }
 /* One editor for every payment: one method, or split across two; date received is optional. */
+/* Payment popup: amount, one method, date (defaults to today). No split. */
 function openPayModal(title, text, amount, onSave, opt) {
   opt = opt || {};
-  var chips = function (grp, sel) { return '<div class="wrap-chips" role="group" data-grp="' + grp + '">' + PAY_METHODS.map(function (m) { return '<button type="button" class="chip" data-act="pmPick" data-v="' + m + '" aria-pressed="' + (m === sel) + '">' + m + '</button>'; }).join('') + '</div>'; };
   var amt = Math.round(amount * 100) / 100 || '';
   modal({ title: title, text: text,
     html: '<div class="pay-editor">' +
-      '<div class="toggle" role="group" aria-label="How it was paid"><button type="button" data-act="pmMode" data-v="one" aria-pressed="true">One method</button><button type="button" data-act="pmMode" data-v="split" aria-pressed="false">Split in two</button></div>' +
-      '<div id="pmOne" class="pay-block"><div class="field"><label for="pmAmt">Amount received (€)</label><input class="input" id="pmAmt" inputmode="decimal" value="' + amt + '"></div><div class="field"><span class="label">Paid by</span>' + chips('one', '') + '</div></div>' +
-      '<div id="pmSplit" class="pay-block" hidden>' +
-        '<div class="field"><span class="label">First method</span>' + chips('a', '') + '<label class="price-wrap wide">€<input class="price-in" id="pmA1" inputmode="decimal" placeholder="Amount" aria-label="First amount"></label></div>' +
-        '<div class="field"><span class="label">Second method</span>' + chips('b', '') + '<label class="price-wrap wide">€<input class="price-in" id="pmA2" inputmode="decimal" placeholder="Amount" aria-label="Second amount"></label></div>' +
-        '<div class="hint" id="pmSplitTot">Total: ' + money(0) + '</div></div>' +
-      '<div class="field"><label for="pmDate">Date received <small>(optional)</small></label><input class="input" id="pmDate" type="date" value="' + today() + '"></div>' +
+      (opt.fixed ? '<div class="pay-fixed"><small>Amount</small><b>' + money(amount) + '</b></div>'
+        : '<div class="field"><label for="pmAmt">' + (opt.amountLabel || 'Amount (€)') + '</label><input class="input" id="pmAmt" inputmode="decimal" value="' + amt + '"></div>') +
+      '<div class="field"><span class="label">Payment method</span><div class="wrap-chips" role="group" data-grp="one">' + PAY_METHODS.map(function (m) { return '<button type="button" class="chip" data-act="pmPick" data-v="' + m + '" aria-pressed="' + (m === opt.method) + '">' + m + '</button>'; }).join('') + '</div></div>' +
+      '<div class="field"><label for="pmDate">' + (opt.dateLabel || 'Date received') + '</label><input class="input" id="pmDate" type="date" value="' + (opt.date || today()) + '"></div>' +
     '</div>',
-    buttons: [{ label: opt.saveLabel || 'Save payment', fn: function () {
-      var pick = function (g) { var b = document.querySelector('[data-grp="' + g + '"] [aria-pressed="true"]'); return b ? b.dataset.v : ''; };
-      var split = !$('#pmSplit').hidden, entry;
-      if (!split) {
-        var v = num($('#pmAmt').value), m = pick('one');
-        if (!(v > 0)) { toast('Enter the amount received'); return false; }
-        if (!m) { toast('Pick how it was paid'); return false; }
-        entry = { amount: v, parts: [{ method: m, amount: v }] };
-      } else {
-        var m1 = pick('a'), m2 = pick('b'), a1 = num($('#pmA1').value), a2 = num($('#pmA2').value);
-        if (!m1 || !m2) { toast('Pick both payment methods'); return false; }
-        if (m1 === m2) { toast('Pick two different methods'); return false; }
-        if (!(a1 > 0) || !(a2 > 0)) { toast('Enter both amounts'); return false; }
-        entry = { amount: a1 + a2, parts: [{ method: m1, amount: a1 }, { method: m2, amount: a2 }] };
-      }
-      entry.date = $('#pmDate').value || '';
-      onSave(cleanPay(entry));
+    buttons: [{ label: opt.saveLabel || 'Save', fn: function () {
+      var b = document.querySelector('[data-grp="one"] [aria-pressed="true"]'), m = b ? b.dataset.v : '';
+      var v = opt.fixed ? amount : num($('#pmAmt').value);
+      if (!(v > 0)) { toast('Enter the amount'); return false; }
+      if (opt.max != null && v > opt.max + 0.001) { toast('That is more than the order total'); return false; }
+      if (!m) { toast('Pick the payment method'); return false; }
+      onSave(cleanPay({ amount: v, date: $('#pmDate').value || '', parts: [{ method: m, amount: v }] }));
     } }].concat(opt.extra || []).concat([{ label: 'Cancel', kind: 'ghost' }]) });
+}
+/* Deposit = first payment (or an amount paid before methods were recorded); balance = anything paid after it. */
+function depositOf(o) {
+  var e = earlierPaid(o), list = o.payments || [];
+  if (e > 0) return { amount: e, parts: [], date: '', earlier: true };
+  return list[0] || null;
+}
+function balanceList(o) { return earlierPaid(o) > 0 ? (o.payments || []) : (o.payments || []).slice(1); }
+function midLabel(o) { return pendingAmt(o) <= 0 && collected(o) > 0 ? 'Paid' : 'Deposit'; }
+function payLine(x) { var m = (x.parts || [])[0]; return (m ? m.method : 'Method not set') + (x.date ? ' · ' + fmtDate(x.date) : ''); }
+function payCardHtml(o) {
+  var dep = depositOf(o), bal = balanceList(o), due = pendingAmt(o), full = dep && !bal.length && due <= 0;
+  var row = function (act, extra, title, x, cta) {
+    return '<button class="pay-opt' + (x && !(x.parts || []).length ? ' needs' : '') + '" data-act="' + act + '" data-id="' + o.id + '"' + extra + '><span class="grow"><small>' + title + '</small><b>' + money(x.amount) + '</b><span>' + esc(payLine(x)) + '</span></span><em>' + cta + '</em></button>';
+  };
+  var h = '<div class="pay-opts">';
+  h += dep ? row('depEdit', '', full ? 'Paid in full' : 'Deposit', dep, (dep.parts || []).length ? 'Change' : 'Set method')
+           : '<button class="pay-opt add" data-act="depEdit" data-id="' + o.id + '"><span class="grow"><small>Deposit</small><b>No deposit yet</b></span><em>Add</em></button>';
+  bal.forEach(function (x, i) { h += row('balEdit', ' data-i="' + i + '"', 'Pending paid', x, 'Change'); });
+  if (due > 0) h += '<button class="pay-opt due" data-act="balPay" data-id="' + o.id + '"><span class="grow"><small>Pending</small><b>' + money(due) + '</b><span>Not paid yet</span></span><em>Mark paid</em></button>';
+  return h + '</div>';
 }
 function methodTotals(list) {
   var t = {};
@@ -541,7 +549,7 @@ function orderCard(o) {
     '<div class="who"><span class="avatar" aria-hidden="true">' + esc((o.name || '?').trim().charAt(0).toUpperCase() || '?') + '</span><div class="name">' + esc(o.name || 'No name') + '</div></div><div class="items-line">' + esc(itemsSummary(o)) + '</div>' +
     '<div class="meta">' + I.cal + '<span>' + esc(fmtDate(o.date)) + (slotOf(o) ? ', ' + esc(slotOf(o)) : '') + '</span><span aria-hidden="true">·</span><span>' + (o.mode === 'delivery' ? 'Delivery' : 'Collection') + '</span>' +
     (o.status === 'ready' || o.status === 'cancelled' ? statusPill(o.status) : '') + '</div>' +
-    (o.status !== 'cancelled' ? '<div class="money-line"><span>Total <b>' + esc(totalLabel(o)) + '</b></span><span>Collected <b class="ok">' + money(collected(o)) + '</b></span><span>Pending <b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></span></div>' : '') +
+    (o.status !== 'cancelled' ? '<div class="money-line"><span>Total <b>' + esc(totalLabel(o)) + '</b></span><span>' + midLabel(o) + ' <b class="ok">' + money(collected(o)) + '</b></span><span>Pending <b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></span></div>' : '') +
     '</a>' + actions + '</article>';
 }
 
@@ -580,10 +588,10 @@ function viewDetail(id) {
     '<section class="card"><div class="section-title" style="margin:0 0 8px">Items</div>' + lines + '<div style="margin-top:8px">' + sums + '</div></section>' +
     (o.notes ? '<section class="card"><div class="section-title" style="margin:0 0 8px">Notes</div><div class="note">' + esc(o.notes) + '</div></section>' : '') +
     '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment ' + payPill(o) + '</div>' +
-      '<div class="paygrid"><div><small>Total</small><b>' + esc(totalLabel(o)) + '</b></div><div><small>Collected</small><b class="ok">' + money(collected(o)) + '</b></div><div><small>Pending</small><b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></div></div>' +
-      payRowsHtml(o, 'payRemove') +
+      '<div class="paygrid"><div><small>Total</small><b>' + esc(totalLabel(o)) + '</b></div><div><small>' + midLabel(o) + '</small><b class="ok">' + money(collected(o)) + '</b></div><div><small>Pending</small><b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></div></div>' +
+      payCardHtml(o) +
       (CLOUD && net.v25 === false ? '<p class="hint warn-note">Payment methods and discounts are only kept on this phone until the database update is run in Supabase.</p>' : '') +
-      (pendingAmt(o) > 0 ? '<div class="btns"><button class="btn sm" data-act="payAdd" data-id="' + o.id + '">' + I.plus + 'Record payment</button><button class="btn sm ghost" data-act="payFull" data-id="' + o.id + '">Paid in full</button></div>' : '') + '</section>' +
+      '</section>' +
     '<section class="card" style="display:flex;flex-direction:column;gap:10px"><div class="section-title" style="margin:0">Message the customer</div>' + msgs + '</section>' +
     '<button class="btn block ghost" data-act="statusPick" data-id="' + o.id + '">Change status</button>' +
     '<div class="btns"><a class="btn ghost" href="#/edit/' + o.id + '">Edit order</a><button class="btn danger" data-act="cancelOrder" data-id="' + o.id + '">' + (o.status === 'cancelled' ? 'Delete' : 'Cancel order') + '</button></div>' +
@@ -595,9 +603,9 @@ function viewDetail(id) {
 /* ---------- Add / edit form ---------- */
 function formPayCard(d) {
   var head = '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment</div>';
-  var nums = function (got) { return '<div class="paygrid"><div><small>Total</small><b id="fpTot">' + esc(totalLabel(d)) + '</b></div><div><small>Collected</small><b class="ok" id="fpGot">' + money(got) + '</b></div><div><small>Pending</small><b class="due" id="fpDue">' + money(Math.max(0, orderTotal(d) - got)) + '</b></div></div>'; };
+  var nums = function (got) { return '<div class="paygrid"><div><small>Total</small><b id="fpTot">' + esc(totalLabel(d)) + '</b></div><div><small id="fpGotL">' + (d.payPlan === 'full' ? 'Paid' : 'Deposit') + '</small><b class="ok" id="fpGot">' + money(got) + '</b></div><div><small>Pending</small><b class="due" id="fpDue">' + money(Math.max(0, orderTotal(d) - got)) + '</b></div></div>'; };
   if (collected(d) > 0) /* payments already recorded on this order */
-    return head + nums(collected(d)) + payRowsHtml(d, 'draftPayRemove') + '<button class="btn block ghost" data-act="draftPayAdd">' + I.plus + 'Add another payment</button></section>';
+    return head + nums(collected(d)) + '<p class="hint" style="margin:0">Change the deposit or mark the pending amount paid on the order screen.</p></section>';
   var plan = d.payPlan || 'none', got = plan === 'full' ? orderTotal(d) : plan === 'deposit' ? num(d.payAmt) : 0;
   var chips = PAY_METHODS.map(function (m) { return '<button type="button" class="chip" data-act="fPayMethod" data-v="' + m + '" aria-pressed="' + (d.payMethod === m) + '">' + m + '</button>'; }).join('');
   return head +
@@ -1063,9 +1071,11 @@ function finishOrder(o) {
   var done = o.mode === 'delivery' ? 'Delivered' : 'Collected', due = pendingAmt(o);
   var finished = function () { toast(o.name + ': ' + done); rerender(); };
   if (due > 0) {
-    openPayModal('Finish order · balance due', o.name + ' · ' + money(collected(o)) + ' paid of ' + totalLabel(o) + '. Record the remaining ' + money(due) + ' and how they paid.', due, function (x) {
-      setPaid(o, collected(o) + x.amount, (o.payments || []).concat([x]), 'delivered'); finished();
-    }, { saveLabel: 'Save payment and finish', extra: [{ label: 'Finish, balance still due', kind: 'ghost', fn: function () { setStatus(o, 'delivered'); finished(); } }] });
+    var dep = depositOf(o);
+    openPayModal('Finish order · pending payment', o.name + ' · ' + money(collected(o)) + ' deposit of ' + totalLabel(o) + '. How did they pay the remaining ' + money(due) + '?', due, function (x) {
+      var base = (dep && dep.earlier ? [{ amount: dep.amount, date: '', parts: [] }] : []).concat(o.payments || []).concat([x]);
+      setPaid(o, paySum({ payments: base }), base, 'delivered'); finished();
+    }, { fixed: true, dateLabel: 'Paid on', saveLabel: 'Mark paid and finish', extra: [{ label: 'Finish, balance still due', kind: 'ghost', fn: function () { setStatus(o, 'delivered'); finished(); } }] });
     return;
   }
   var how = (o.payments || []).map(function (x) { return money(x.amount) + ' ' + payMethodText(x) + (x.date ? ' (' + fmtDate(x.date) + ')' : ''); }).join(', ');
@@ -1234,6 +1244,28 @@ var ACT = {
     });
   },
   payFull: function (el) { ACT.payAdd(el, null, true); },
+  depEdit: function (el) {
+    var o = getOrder(el.dataset.id); if (!o) return; var dep = depositOf(o), bal = balanceList(o), m = dep && dep.parts && dep.parts[0];
+    var others = bal.reduce(function (t, x) { return t + num(x.amount); }, 0);
+    openPayModal(dep ? 'Deposit' : 'Add deposit', o.name + ' · total ' + totalLabel(o), dep ? dep.amount : '', function (x) {
+      var list = [x].concat(bal); o.paid = false; setPaid(o, paySum({ payments: list }), list); rerender();
+    }, { amountLabel: 'Deposit amount (€)', dateLabel: 'Deposit received on', method: m ? m.method : '', date: dep && dep.date, max: orderTotal(o) - others, saveLabel: 'Save deposit',
+      extra: dep ? [{ label: 'Remove deposit', kind: 'danger', fn: function () { o.paid = false; setPaid(o, paySum({ payments: bal }), bal.slice()); rerender(); } }] : [] });
+  },
+  balPay: function (el) {
+    var o = getOrder(el.dataset.id); if (!o) return; var due = pendingAmt(o), dep = depositOf(o);
+    openPayModal('Pending payment', o.name + ' · ' + money(due) + ' still to pay', due, function (x) {
+      var base = (dep && dep.earlier ? [{ amount: dep.amount, date: '', parts: [] }] : []).concat(o.payments || []).concat([x]);
+      setPaid(o, paySum({ payments: base }), base); rerender();
+    }, { fixed: true, dateLabel: 'Paid on', saveLabel: 'Mark as paid' });
+  },
+  balEdit: function (el) {
+    var o = getOrder(el.dataset.id); if (!o) return; var i = +el.dataset.i, idx = i + (earlierPaid(o) > 0 ? 0 : 1), x = o.payments[idx], m = x.parts && x.parts[0];
+    openPayModal('Pending payment', o.name, x.amount, function (y) {
+      var list = o.payments.slice(); list[idx] = y; setPaid(o, paySum({ payments: list }) + earlierPaid(o), list); rerender();
+    }, { fixed: true, dateLabel: 'Paid on', method: m ? m.method : '', date: x.date, saveLabel: 'Save',
+      extra: [{ label: 'Remove this payment', kind: 'danger', fn: function () { var e = earlierPaid(o), list = o.payments.slice(); list.splice(idx, 1); o.paid = false; setPaid(o, paySum({ payments: list }) + e, list); rerender(); } }] });
+  },
   payRemove: function (el) {
     var o = getOrder(el.dataset.id); if (!o) return; var i = el.dataset.i;
     var amt = i === 'earlier' ? earlierPaid(o) : num(o.payments[+i].amount);
@@ -1550,14 +1582,14 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d
 document.addEventListener('submit', function (e) { if (e.target.id === 'loginForm') { e.preventDefault(); ACT.login(); } });
 
 /* ---------- start ---------- */
-if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded7')) {
+if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded8')) {
   db.orders = sampleOrders();
   db.orders[3].paidAmount = 20; db.orders[3].paid = false; db.orders[3].payments = [{ amount: 20, date: today(), parts: [{ method: 'Revolut', amount: 20 }] }];
   if (db.orders[2]) { db.orders[2].discount = { type: 'percent', value: 10, note: 'Friends & family' }; }
   var t0 = today();
   db.offers = [];
   db.markets = [{"name": "Meeting House Square Food & Farmers Market", "kind": "Market", "status": "active", "place": "Temple Bar, Dublin 2", "address": "Meeting House Square, Temple Bar, Dublin 2", "days": [6], "startTime": "10:00", "endTime": "", "skipDates": ["2026-11-07"], "notes": "Pre-order on WhatsApp", "description": "Saturday crowds, warm cookies and plenty of new faces in the heart of Dublin."}, {"name": "Portobello Market", "kind": "Market", "status": "active", "place": "We Love Market, Portobello", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the Portobello market, run by the We Love Market team."}, {"name": "Boland's Mills Market", "kind": "Market", "status": "active", "place": "We Love Market, Grand Canal Dock", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at Boland's Mills, one of Dublin's best-known spots."}, {"name": "The Digital Hub Market", "kind": "Market", "status": "active", "place": "We Love Market, The Liberties", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at the Digital Hub, with fresh bakes for the teams and neighbours around it."}, {"name": "Taste of Dublin", "kind": "Festival", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall among the city's best food names, sharing our handmade bakes with thousands of food lovers."}, {"name": "Mountain View Market", "kind": "Market", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A friendly neighbourhood market where regulars started coming back every week."}, {"name": "Ireland Telugu Association", "kind": "Community", "status": "past", "place": "Community events", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Festival and community events with the Telugu community, with bakes that taste like home."}, {"name": "Cheese & Wine Festival", "kind": "Festival", "status": "past", "place": "The Bernard Shaw, Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A weekend of tastings and pairings at The Bernard Shaw, with our sweet side of the table."}].map(function (m, k) { return Object.assign({ id: newId(), mapsUrl: m.address ? mapsUrl(m.address) : '', startsOn: '', endsOn: '', active: true, sort: k }, m); });
-  save(); try { store.setItem('sbs.preview.seeded7', '1'); } catch (e) {}
+  save(); try { store.setItem('sbs.preview.seeded8', '1'); } catch (e) {}
 }
 if (!MEM && !location.hash) { try { history.replaceState(null, '', '#/orders'); } catch (e) {} }
 if (CLOUD) {
