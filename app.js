@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.4.1';
+var VERSION = '2.5.0';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -97,8 +97,11 @@ function save() { try { store.setItem(KEY, JSON.stringify(db)); } catch (e) { to
 
 /* ---------- shared online database (Supabase) ---------- */
 var sb = null, net = { checked: !CLOUD, user: null, offline: false, syncing: false, chan: null, lastPull: 0 };
-var FIELD = { name: 'name', phone: 'phone', source: 'source', items: 'items', mode: 'mode', date: 'order_date', address: 'address', fee: 'fee', notes: 'notes', paid: 'paid', paidAmount: 'paid_amount', status: 'status' };
-var ORDER_KEYS = ['name', 'phone', 'source', 'items', 'mode', 'date', 'slot', 'address', 'fee', 'notes', 'paidAmount', 'paid'];
+var FIELD = { name: 'name', phone: 'phone', source: 'source', items: 'items', mode: 'mode', date: 'order_date', address: 'address', fee: 'fee', notes: 'notes', paid: 'paid', paidAmount: 'paid_amount', status: 'status', payments: 'payments', discount: 'discount' };
+var BASE_KEYS = ['name', 'phone', 'source', 'items', 'mode', 'date', 'slot', 'address', 'fee', 'notes', 'paidAmount', 'paid'];
+var ORDER_KEYS = BASE_KEYS.concat(['payments', 'discount']);
+/* payments + discount columns arrive with the 2.5 database update; until it is run they are kept on this device only */
+function orderKeys() { return !CLOUD || net.v25 ? ORDER_KEYS : BASE_KEYS; }
 function toRow(o, keys) {
   var r = {};
   keys.forEach(function (k) {
@@ -110,6 +113,8 @@ function toRow(o, keys) {
     else if (k === 'paid') v = isPaid(o);
     else if (k === 'date' || k === 'phone' || k === 'address' || k === 'notes') v = v ? String(v) : null;
     else if (k === 'name') v = String(v || '').trim();
+    else if (k === 'payments') v = (v || []).map(cleanPay).filter(function (x) { return x.amount > 0; });
+    else if (k === 'discount') v = discountAmt(o) > 0 ? { type: o.discount.type === 'percent' ? 'percent' : 'amount', value: num(o.discount.value), note: o.discount.note || '' } : null;
     else if (k === 'items') v = (v || []).map(function (l) { return { menuId: l.menuId || null, name: l.name, option: l.option || '', price: num(l.price), qty: l.qty || 1 }; });
     r[c] = v;
   });
@@ -119,7 +124,7 @@ function fromRow(r) {
   var slot = r.slot || '', known = !slot || SLOTS.indexOf(slot) >= 0;
   return { id: r.id, ref: r.ref, status: r.status, source: r.source || 'other', name: r.name || '', phone: r.phone || '', mode: r.mode || 'collection',
     date: r.order_date || '', slot: known ? slot : 'other', slotOther: known ? '' : slot, address: r.address || '', fee: r.fee == null ? '' : String(+r.fee),
-    notes: r.notes || '', paid: !!r.paid, paidAmount: r.paid_amount == null ? 0 : +r.paid_amount, items: Array.isArray(r.items) ? r.items : [], createdAt: Date.parse(r.created_at) || 0, updatedAt: Date.parse(r.updated_at) || 0 };
+    notes: r.notes || '', paid: !!r.paid, paidAmount: r.paid_amount == null ? 0 : +r.paid_amount, items: Array.isArray(r.items) ? r.items : [], payments: Array.isArray(r.payments) ? r.payments : [], discount: r.discount && num(r.discount.value) > 0 ? r.discount : null, createdAt: Date.parse(r.created_at) || 0, updatedAt: Date.parse(r.updated_at) || 0 };
 }
 function toMenuRow(it, i) { return { id: it.id, cat: it.cat, name: it.name, description: it.description || null, allergens: it.allergens || [], badge: it.badge || null, tags: it.tags || [], options: it.options || [], includes: it.includes || [], active: it.active !== false, seasonal: !!it.seasonal, sort: i == null ? (it.sort || 0) : i }; }
 function fromMenuRow(r) { return { id: r.id, cat: r.cat, name: r.name, description: r.description || '', allergens: Array.isArray(r.allergens) ? r.allergens : [], badge: r.badge || '', tags: Array.isArray(r.tags) ? r.tags : [], options: r.options || [], includes: r.includes || [], active: !!r.active, seasonal: !!r.seasonal, sort: r.sort || 0 }; }
@@ -189,6 +194,8 @@ function pull() {
     if (!res[4].error) db.markets = res[4].data.map(fromMarketRow);
     if (!res[5].error) res[5].data.forEach(function (row) { if (row.key === 'notices') db.notices = Object.assign(defaultNotices(), row.value || {}); else if (row.key === 'sections' && Array.isArray(row.value)) db.sections = row.value; });
     db.orders = res[0].data.map(fromRow);
+    if (res[0].data.length) net.v25 = 'payments' in res[0].data[0] && 'discount' in res[0].data[0];
+    else sb.from('orders').select('payments,discount').limit(1).then(function (r) { net.v25 = !r.error; });
     if (res[1].data.length) db.menu = res[1].data.map(fromMenuRow);
     else { db.menu = defaultMenu(); sb.from('menu_items').upsert(db.menu.map(toMenuRow)).then(function () {}); }
     db.bake = {};
@@ -242,12 +249,76 @@ function saveMessagesSoon() { save(); clearTimeout(settingTimer); settingTimer =
 function getOrder(id) { for (var i = 0; i < db.orders.length; i++) if (db.orders[i].id === id) return db.orders[i]; return null; }
 function getItem(id) { for (var i = 0; i < db.menu.length; i++) if (db.menu[i].id === id) return db.menu[i]; return null; }
 function subtotal(o) { return (o.items || []).reduce(function (s, l) { return s + num(l.price) * (l.qty || 0); }, 0); }
-function orderTotal(o) { return subtotal(o) + (o.mode === 'delivery' ? num(o.fee) : 0); }
+/* Order discount: a % or € amount off the items (not the delivery fee). */
+function discountAmt(o) {
+  var d = o.discount; if (!d || !(num(d.value) > 0)) return 0;
+  var sub = subtotal(o), v = num(d.value);
+  return Math.round((d.type === 'percent' ? sub * Math.min(100, v) / 100 : Math.min(sub, v)) * 100) / 100;
+}
+function discountLabel(o) { var d = o.discount; if (!discountAmt(o)) return ''; return 'Discount' + (d.type === 'percent' ? ' (' + (+num(d.value)) + '%)' : '') + (d.note ? ' · ' + d.note : ''); }
+function orderTotal(o) { return Math.max(0, subtotal(o) - discountAmt(o)) + (o.mode === 'delivery' ? num(o.fee) : 0); }
 function totalLabel(o) { var t = money(orderTotal(o)); return (o.mode === 'delivery' && (o.fee === '' || o.fee == null)) ? t + ' + delivery' : t; }
 /* Payments: amount collected so far. Older orders that were only ticked "paid" count as fully paid. */
 function collected(o) { var a = num(o.paidAmount); if (!a && o.paid) return orderTotal(o); return a; }
 function pendingAmt(o) { return Math.max(0, Math.round((orderTotal(o) - collected(o)) * 100) / 100); }
 function isPaid(o) { var t = orderTotal(o); return t > 0 ? collected(o) >= t - 0.004 : !!o.paid; }
+var PAY_METHODS = ['SumUp', 'Revolut', 'Bank transfer', 'Cash'];
+function cleanPay(x) { return { amount: Math.round(num(x.amount) * 100) / 100, date: x.date || '', parts: (x.parts || []).filter(function (p) { return p.method; }).map(function (p) { return { method: p.method, amount: Math.round(num(p.amount) * 100) / 100 }; }) }; }
+function paySum(o) { return (o.payments || []).reduce(function (s, x) { return s + num(x.amount); }, 0); }
+/* Money collected before payment methods were recorded (or typed as one figure) */
+function earlierPaid(o) { return Math.max(0, Math.round((collected(o) - paySum(o)) * 100) / 100); }
+function payMethodText(x) { var p = x.parts || []; if (!p.length) return 'Method not recorded'; return p.length === 1 ? p[0].method : p.map(function (q) { return money(q.amount) + ' ' + q.method; }).join(' + '); }
+function payRowsHtml(o, act) {
+  var rows = (o.payments || []).map(function (x, i) {
+    return '<div class="pay-row"><div class="grow"><b>' + money(x.amount) + '</b><span>' + esc(payMethodText(x)) + (x.date ? ' · ' + esc(fmtDate(x.date)) : '') + '</span></div>' +
+      '<button class="icon-btn" data-act="' + act + '" data-i="' + i + '"' + (o.id ? ' data-id="' + o.id + '"' : '') + ' aria-label="Remove this payment">' + I.x + '</button></div>';
+  });
+  var e = earlierPaid(o);
+  if (e > 0) rows.unshift('<div class="pay-row"><div class="grow"><b>' + money(e) + '</b><span>Paid earlier · method not recorded</span></div><button class="icon-btn" data-act="' + act + '" data-i="earlier"' + (o.id ? ' data-id="' + o.id + '"' : '') + ' aria-label="Remove this payment">' + I.x + '</button></div>');
+  return rows.length ? '<div class="pay-list">' + rows.join('') + '</div>' : '';
+}
+/* One editor for every payment: one method, or split across two; date received is optional. */
+function openPayModal(title, text, amount, onSave) {
+  var chips = function (grp, sel) { return '<div class="wrap-chips" role="group" data-grp="' + grp + '">' + PAY_METHODS.map(function (m) { return '<button type="button" class="chip" data-act="pmPick" data-v="' + m + '" aria-pressed="' + (m === sel) + '">' + m + '</button>'; }).join('') + '</div>'; };
+  var amt = Math.round(amount * 100) / 100 || '';
+  modal({ title: title, text: text,
+    html: '<div class="pay-editor">' +
+      '<div class="toggle" role="group" aria-label="How it was paid"><button type="button" data-act="pmMode" data-v="one" aria-pressed="true">One method</button><button type="button" data-act="pmMode" data-v="split" aria-pressed="false">Split in two</button></div>' +
+      '<div id="pmOne" class="pay-block"><div class="field"><label for="pmAmt">Amount received (€)</label><input class="input" id="pmAmt" inputmode="decimal" value="' + amt + '"></div><div class="field"><span class="label">Paid by</span>' + chips('one', '') + '</div></div>' +
+      '<div id="pmSplit" class="pay-block" hidden>' +
+        '<div class="field"><span class="label">First method</span>' + chips('a', '') + '<label class="price-wrap wide">€<input class="price-in" id="pmA1" inputmode="decimal" placeholder="Amount" aria-label="First amount"></label></div>' +
+        '<div class="field"><span class="label">Second method</span>' + chips('b', '') + '<label class="price-wrap wide">€<input class="price-in" id="pmA2" inputmode="decimal" placeholder="Amount" aria-label="Second amount"></label></div>' +
+        '<div class="hint" id="pmSplitTot">Total: ' + money(0) + '</div></div>' +
+      '<div class="field"><label for="pmDate">Date received <small>(optional)</small></label><input class="input" id="pmDate" type="date"></div>' +
+    '</div>',
+    buttons: [{ label: 'Save payment', fn: function () {
+      var pick = function (g) { var b = document.querySelector('[data-grp="' + g + '"] [aria-pressed="true"]'); return b ? b.dataset.v : ''; };
+      var split = !$('#pmSplit').hidden, entry;
+      if (!split) {
+        var v = num($('#pmAmt').value), m = pick('one');
+        if (!(v > 0)) { toast('Enter the amount received'); return false; }
+        if (!m) { toast('Pick how it was paid'); return false; }
+        entry = { amount: v, parts: [{ method: m, amount: v }] };
+      } else {
+        var m1 = pick('a'), m2 = pick('b'), a1 = num($('#pmA1').value), a2 = num($('#pmA2').value);
+        if (!m1 || !m2) { toast('Pick both payment methods'); return false; }
+        if (m1 === m2) { toast('Pick two different methods'); return false; }
+        if (!(a1 > 0) || !(a2 > 0)) { toast('Enter both amounts'); return false; }
+        entry = { amount: a1 + a2, parts: [{ method: m1, amount: a1 }, { method: m2, amount: a2 }] };
+      }
+      entry.date = $('#pmDate').value || '';
+      onSave(cleanPay(entry));
+    } }, { label: 'Cancel', kind: 'ghost' }] });
+}
+function methodTotals(list) {
+  var t = {};
+  list.forEach(function (o) {
+    if (o.status === 'cancelled') return;
+    (o.payments || []).forEach(function (x) { (x.parts || []).forEach(function (p) { t[p.method] = (t[p.method] || 0) + num(p.amount); }); });
+    var e = earlierPaid(o); if (e > 0) t['Method not recorded'] = (t['Method not recorded'] || 0) + e;
+  });
+  return t;
+}
 function payState(o) { if (isPaid(o)) return 'paid'; return collected(o) > 0 ? 'part' : 'unpaid'; }
 function payPill(o, small) {
   var st = payState(o), h = small ? ';height:22px' : '';
@@ -292,7 +363,7 @@ function itemsSummary(o) {
   var first = it.slice(0, 2).map(function (l) { return l.qty + ' × ' + l.name + (optText(l) && it.length < 3 ? ' (' + optText(l) + ')' : ''); }).join(', ');
   return first + (it.length > 2 ? ' + ' + (it.length - 2) + ' more' : '');
 }
-function itemsText(o) { return (o.items || []).map(function (l) { return '• ' + l.qty + ' × ' + l.name + (optText(l) ? ' (' + optText(l) + ')' : '') + ' ' + money(num(l.price) * l.qty); }).join('\n'); }
+function itemsText(o) { return (o.items || []).map(function (l) { return '• ' + l.qty + ' × ' + l.name + (optText(l) ? ' (' + optText(l) + ')' : '') + ' ' + money(num(l.price) * l.qty); }).join('\n') + (discountAmt(o) ? '\n' + discountLabel(o) + ': −' + money(discountAmt(o)) : ''); }
 function whenText(o) { var s = slotOf(o); return fmtDate(o.date, true) + (s ? ', ' + s : ''); }
 function fillTemplate(t, o) {
   var mode = o.mode === 'delivery' ? 'delivery' : 'collection';
@@ -332,7 +403,7 @@ function hasSamples() { return db.orders.some(function (o) { return o.sample; })
 
 /* ---------- draft (order being added / edited) ---------- */
 var draft = null;
-function blankDraft() { return { key: 'new', id: null, name: '', phone: '', source: 'whatsapp', items: [], mode: 'collection', date: addDays(today(), 2), slot: '6–7 pm', slotOther: '', address: '', fee: '', notes: '', paid: false, paidAmount: '' }; }
+function blankDraft() { return { key: 'new', id: null, name: '', phone: '', source: 'whatsapp', items: [], mode: 'collection', date: addDays(today(), 2), slot: '6–7 pm', slotOther: '', address: '', fee: '', notes: '', paid: false, paidAmount: 0, payments: [], discount: null }; }
 function loadDraft() { try { var d = JSON.parse(store.getItem(DRAFT_KEY)); if (d && d.key) return d; } catch (e) {} return null; }
 function saveDraft() { try { store.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch (e) {} }
 function clearDraft() { draft = null; store.removeItem(DRAFT_KEY); }
@@ -343,7 +414,7 @@ function ensureDraft(key) {
   else {
     var o = getOrder(key.slice(5));
     if (!o) return null;
-    draft = JSON.parse(JSON.stringify(o)); draft.key = key; draft.paidAmount = collected(o) || '';
+    draft = JSON.parse(JSON.stringify(o)); draft.key = key; draft.paidAmount = collected(o) || 0; draft.payments = draft.payments || []; draft.discount = draft.discount || null;
   }
   saveDraft();
   return draft;
@@ -448,7 +519,7 @@ function viewOrders() {
   var segs = [['pending', 'To confirm'], ['active', 'Confirmed'], ['done', 'Done']].map(function (s) {
     return '<button data-act="ordersTab" data-v="' + s[0] + '" aria-pressed="' + (tab === s[0]) + '">' + s[1] + ' <em>' + groups[s[0]].length + '</em></button>';
   }).join('');
-  return '<header class="top"><div class="top-inner"><div class="top-row"><img class="logo" src="logo.jpg" alt="" width="46" height="46"><div class="brand"><b>Savor by Sree</b><small>Orders · ' + esc(fmtDate(today(), true)) + (window.SBS_PREVIEW ? ' · preview with sample orders' : '') + '</small></div></div>' +
+  return '<header class="top hero"><div class="top-inner"><div class="top-row"><img class="logo" src="logo.jpg" alt="" width="46" height="46"><div class="brand"><b>Savor by Sree</b><small>Orders · ' + esc(fmtDate(today(), true)) + (window.SBS_PREVIEW ? ' · preview with sample orders' : '') + '</small></div></div>' +
     '<label class="search"><span class="sr">Search orders</span>' + I.search + '<input type="search" placeholder="Search name, phone or order no." value="' + esc(ui.q) + '" data-field="q"></label></div></header>' +
     '<main><div class="seg" role="group" aria-label="Order status">' + segs + '</div><div id="olist" style="display:flex;flex-direction:column;gap:12px">' + listHtml(list, tab, q) + '</div></main>' +
     '<a class="fab" href="#/new">' + I.plus + 'New order</a>' + tabsHtml('orders');
@@ -464,9 +535,9 @@ function orderCard(o) {
   if (o.status === 'pending') actions = '<div class="btns"><button class="btn sm" data-act="confirm" data-id="' + o.id + '">' + I.check + 'Confirm</button>' + (o.phone ? '<a class="btn sm wa" href="' + esc(waUrl(o.phone)) + '" target="_blank" rel="noopener">' + I.wa + 'Chat</a>' : '') + '</div>';
   else if (o.status === 'confirmed') actions = '<div class="btns"><button class="btn sm ghost" data-act="status" data-v="ready" data-id="' + o.id + '">Mark ready</button><button class="btn sm ghost" data-act="status" data-v="delivered" data-id="' + o.id + '">' + (o.mode === 'delivery' ? 'Delivered' : 'Collected') + '</button></div>';
   else if (o.status === 'ready') actions = '<div class="btns"><button class="btn sm" data-act="status" data-v="delivered" data-id="' + o.id + '">' + (o.mode === 'delivery' ? 'Delivered' : 'Collected') + '</button></div>';
-  return '<article class="card order-card"><a class="body" href="#/order/' + o.id + '">' +
+  return '<article class="card order-card st-' + o.status + '"><a class="body" href="#/order/' + o.id + '">' +
     '<div class="row">' + sourcePill(o.source) + '<span class="ref">' + esc(o.ref) + '</span><span class="total">' + esc(totalLabel(o)) + '</span></div>' +
-    '<div class="name">' + esc(o.name || 'No name') + '</div><div class="items-line">' + esc(itemsSummary(o)) + '</div>' +
+    '<div class="who"><span class="avatar" aria-hidden="true">' + esc((o.name || '?').trim().charAt(0).toUpperCase() || '?') + '</span><div class="name">' + esc(o.name || 'No name') + '</div></div><div class="items-line">' + esc(itemsSummary(o)) + '</div>' +
     '<div class="meta">' + I.cal + '<span>' + esc(fmtDate(o.date)) + (slotOf(o) ? ', ' + esc(slotOf(o)) : '') + '</span><span aria-hidden="true">·</span><span>' + (o.mode === 'delivery' ? 'Delivery' : 'Collection') + '</span>' +
     (o.status !== 'pending' && o.status !== 'cancelled' ? payPill(o, true) : '') + (o.status === 'ready' || o.status === 'cancelled' ? statusPill(o.status) : '') + '</div></a>' + actions + '</article>';
 }
@@ -482,6 +553,7 @@ function viewDetail(id) {
     return '<div class="line"><div class="grow"><div class="nm">' + l.qty + ' × ' + esc(l.name) + '</div>' + (optText(l) ? '<div class="op">' + esc(optText(l)) + '</div>' : '') + '</div><b>' + money(num(l.price) * l.qty) + '</b></div>';
   }).join('') || '<p class="hint">No items</p>';
   var sums = '<div class="sum"><span>Items</span><b>' + money(subtotal(o)) + '</b></div>' +
+    (discountAmt(o) ? '<div class="sum disc"><span>' + esc(discountLabel(o)) + '</span><b>−' + money(discountAmt(o)) + '</b></div>' : '') +
     (o.mode === 'delivery' ? '<div class="sum"><span>Delivery</span><b>' + (o.fee === '' || o.fee == null ? 'Not set' : money(num(o.fee))) + '</b></div>' : '') +
     '<div class="sum big"><span>Total</span><span>' + esc(totalLabel(o)) + '</span></div>';
   var main = '';
@@ -506,8 +578,9 @@ function viewDetail(id) {
     (o.notes ? '<section class="card"><div class="section-title" style="margin:0 0 8px">Notes</div><div class="note">' + esc(o.notes) + '</div></section>' : '') +
     '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment ' + payPill(o) + '</div>' +
       '<div class="paygrid"><div><small>Total</small><b>' + esc(totalLabel(o)) + '</b></div><div><small>Collected</small><b class="ok">' + money(collected(o)) + '</b></div><div><small>Pending</small><b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></div></div>' +
-      '<div class="btns">' + (pendingAmt(o) > 0 ? '<button class="btn sm" data-act="payAdd" data-id="' + o.id + '">' + I.plus + 'Record payment</button><button class="btn sm ghost" data-act="payFull" data-id="' + o.id + '">Paid in full</button>'
-        : '<button class="btn sm ghost" data-act="payReset" data-id="' + o.id + '">Change payment</button>') + '</div></section>' +
+      payRowsHtml(o, 'payRemove') +
+      (CLOUD && net.v25 === false ? '<p class="hint warn-note">Payment methods and discounts are only kept on this phone until the database update is run in Supabase.</p>' : '') +
+      (pendingAmt(o) > 0 ? '<div class="btns"><button class="btn sm" data-act="payAdd" data-id="' + o.id + '">' + I.plus + 'Record payment</button><button class="btn sm ghost" data-act="payFull" data-id="' + o.id + '">Paid in full</button></div>' : '') + '</section>' +
     '<section class="card" style="display:flex;flex-direction:column;gap:10px"><div class="section-title" style="margin:0">Message the customer</div>' + msgs + '</section>' +
     '<button class="btn block ghost" data-act="statusPick" data-id="' + o.id + '">Change status</button>' +
     '<div class="btns"><a class="btn ghost" href="#/edit/' + o.id + '">Edit order</a><button class="btn danger" data-act="cancelOrder" data-id="' + o.id + '">' + (o.status === 'cancelled' ? 'Delete' : 'Cancel order') + '</button></div>' +
@@ -552,7 +625,15 @@ function viewForm(key) {
       (d.mode === 'delivery' ? '<div class="field"><label for="fAddr">Delivery address or Eircode</label><input class="input" id="fAddr" data-draft="address" value="' + esc(d.address) + '" autocapitalize="characters"></div>' +
         '<div class="field"><label for="fFee">Delivery fee (€)</label><input class="input" id="fFee" inputmode="decimal" data-draft="fee" value="' + esc(d.fee) + '" placeholder="Leave empty until agreed"></div>' : '') +
       '<div class="field"><label for="fNotes">Notes</label><textarea class="input" id="fNotes" data-draft="notes" placeholder="Allergies, occasion, message on the cake, flavour…">' + esc(d.notes) + '</textarea><span class="hint">Allergies count as health information. Only note them when they matter for this order.</span></div>' +
-      '<div class="field"><label for="fPaid">Paid so far (€)</label><input class="input" id="fPaid" inputmode="decimal" data-draft="paidAmount" value="' + esc(d.paidAmount === 0 ? '' : (d.paidAmount == null ? '' : d.paidAmount)) + '" placeholder="0"><span class="hint">For a deposit, enter the amount received. Leave empty if nothing is paid yet.</span></div>' +
+    '</section>' +
+    '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Discount <small id="fDisc">' + (discountAmt(d) ? '−' + money(discountAmt(d)) : '') + '</small></div>' +
+      '<div class="toggle three" role="group" aria-label="Discount type"><button data-act="discType" data-v="" aria-pressed="' + !d.discount + '">None</button><button data-act="discType" data-v="percent" aria-pressed="' + !!(d.discount && d.discount.type === 'percent') + '">% off</button><button data-act="discType" data-v="amount" aria-pressed="' + !!(d.discount && d.discount.type === 'amount') + '">€ off</button></div>' +
+      (d.discount ? '<div class="grid2"><div class="field"><label for="fDiscV">' + (d.discount.type === 'percent' ? 'Percent off' : 'Amount off (€)') + '</label><input class="input" id="fDiscV" inputmode="decimal" data-disc="value" value="' + esc(d.discount.value) + '" placeholder="' + (d.discount.type === 'percent' ? 'e.g. 10' : 'e.g. 5') + '"></div>' +
+        '<div class="field"><label for="fDiscN">Reason <small>(optional)</small></label><input class="input" id="fDiscN" data-disc="note" value="' + esc(d.discount.note || '') + '" placeholder="e.g. Friends & family"></div></div>' : '') +
+    '</section>' +
+    '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment <small>' + (collected(d) > 0 ? money(collected(d)) + ' paid' : 'Nothing paid yet') + '</small></div>' +
+      payRowsHtml(d, 'draftPayRemove') +
+      '<button class="btn block ghost" data-act="draftPayAdd">' + I.plus + (collected(d) > 0 ? 'Add another payment' : 'Record a deposit or payment') + '</button>' +
     '</section>' +
     '</main><div class="bar"><div class="sum big" style="border:0;margin:0;padding:0"><span>Total</span><span id="fTotal">' + esc(totalLabel(d)) + '</span></div><button class="btn block" data-act="saveOrder">' + I.check + (isNew ? 'Save order' : 'Save changes') + '</button></div>';
 }
@@ -676,7 +757,7 @@ function viewToday() {
       '<button class="btn sm" data-act="status" data-v="delivered" data-id="' + o.id + '">' + (o.mode === 'delivery' ? 'Delivered' : 'Collected') + '</button></div></article>';
   }).join('');
   var due = live.reduce(function (s, o) { return s + orderTotal(o); }, 0);
-  return '<header class="top"><div class="top-inner"><div class="top-row"><div class="brand"><b>' + esc(fmtDate(day, true)) + '</b><small>' + live.length + ' to hand over · ' + done.length + ' done · ' + money(due) + '</small></div>' +
+  return '<header class="top hero"><div class="top-inner"><div class="top-row"><div class="brand"><b>' + esc(fmtDate(day, true)) + '</b><small>' + live.length + ' to hand over · ' + done.length + ' done · ' + money(due) + '</small></div>' +
     (day !== t ? '<button class="btn sm ghost" data-act="day" data-v="' + t + '">Today</button>' : '') + '</div><div class="days" role="group" aria-label="Pick a day">' + strip + '</div></div></header>' +
     '<main>' + (pend.length ? '<a class="card" href="#/orders" data-act="ordersTabGo" style="text-decoration:none;color:var(--warn);font-weight:700;font-size:14px;background:var(--paper)">' + pend.length + ' order' + (pend.length > 1 ? 's' : '') + ' for this day still to confirm</a>' : '') +
     '<section class="card"><div class="section-title" style="margin:0 0 6px">Bake list <small>' + (keys.length ? doneCount + ' of ' + keys.length + ' done' : '') + '</small></div>' + bakeHtml + '</section>' +
@@ -736,7 +817,7 @@ function siteHeader(cur, right, extra) {
   var tabs = [['menu', '#/menu', 'Menu'], ['offers', '#/offers', 'Offers'], ['markets', '#/markets', 'Markets'], ['notices', '#/notices', 'Notices']].map(function (x) {
     return '<a class="segl" href="' + x[1] + '" data-replace="1"' + (x[0] === cur ? ' aria-current="page"' : '') + '>' + x[2] + '</a>';
   }).join('');
-  return '<header class="top"><div class="top-inner"><div class="top-row"><div class="brand"><b>Website</b><small>Changes show on the website straight away</small></div>' + (right || '') + '</div>' +
+  return '<header class="top hero"><div class="top-inner"><div class="top-row"><div class="brand"><b>Website</b><small>Changes show on the website straight away</small></div>' + (right || '') + '</div>' +
     '<nav class="segnav" aria-label="Website sections">' + tabs + '</nav>' + (extra || '') + '</div></header>' +
     (CLOUD && net.user && net.siteReady === false && cur !== 'menu' ? '<div class="setup-warn" role="alert">Offers, markets and notices need the latest setup code in Supabase. Run it in the SQL Editor, then tap Refresh on the More page.</div>' : '');
 }
@@ -918,11 +999,15 @@ function viewMore() {
   var mStart = t.slice(0, 8) + '01', mEnd = t.slice(0, 8) + '31';
   var W = moneySummary(wk), M = moneySummary(db.orders.filter(function (o) { return o.date >= mStart && o.date <= mEnd; }));
   var owing = db.orders.filter(function (o) { return o.status !== 'cancelled' && o.status !== 'pending' && pendingAmt(o) > 0; }).sort(sortActive);
-  function block(title, X) { return '<div class="section-title">' + title + ' <small>' + X.n + ' order' + (X.n === 1 ? '' : 's') + '</small></div><div class="stats"><div class="stat"><small>Total</small><b>' + money(X.total) + '</b></div><div class="stat"><small>Collected</small><b style="color:var(--green)">' + money(X.got) + '</b></div><div class="stat"><small>Pending</small><b style="color:var(--warn)">' + money(X.due) + '</b></div></div>'; }
+  function block(title, X, list) {
+    var mt = methodTotals(list), keys = PAY_METHODS.concat(['Method not recorded']).filter(function (k) { return mt[k] > 0; });
+    return '<div class="section-title">' + title + ' <small>' + X.n + ' order' + (X.n === 1 ? '' : 's') + '</small></div><div class="stats"><div class="stat"><small>Total</small><b>' + money(X.total) + '</b></div><div class="stat"><small>Collected</small><b style="color:var(--green)">' + money(X.got) + '</b></div><div class="stat"><small>Pending</small><b style="color:var(--warn)">' + money(X.due) + '</b></div></div>' +
+      (keys.length ? '<div class="method-row">' + keys.map(function (k) { return '<span class="mchip"><small>' + esc(k) + '</small><b>' + money(mt[k]) + '</b></span>'; }).join('') + '</div>' : ''); }
+  var mList = db.orders.filter(function (o) { return o.date >= mStart && o.date <= mEnd && o.status !== 'pending'; });
   var s = db.settings;
-  return '<header class="top"><div class="top-inner"><div class="top-row"><div class="brand"><b>More</b><small>Money, messages and settings</small></div></div></div></header><main>' +
+  return '<header class="top hero"><div class="top-inner"><div class="top-row"><div class="brand"><b>More</b><small>Money, messages and settings</small></div></div></div></header><main>' +
     '<p style="margin:0;font-size:13px;color:var(--muted)">Confirmed, ready and delivered orders, by order date. Orders still to confirm are not counted.</p>' +
-    block('This week', W) + block(MONTHS[d.getMonth()] + ' ' + d.getFullYear(), M) +
+    block('This week', W, wk.filter(function (o) { return o.status !== 'pending'; })) + block(MONTHS[d.getMonth()] + ' ' + d.getFullYear(), M, mList) +
     '<div class="section-title">Still to collect <small>' + money(owing.reduce(function (s, o) { return s + pendingAmt(o); }, 0)) + '</small></div>' +
     (owing.length ? '<section class="card" style="padding:4px 14px">' + owing.slice(0, 30).map(function (o) { return '<a class="owe" href="#/order/' + o.id + '"><span class="grow"><b>' + esc(o.name) + '</b><small>' + esc(o.ref + ' · ' + fmtDate(o.date)) + '</small></span>' + payPill(o, true) + '</a>'; }).join('') + '</section>' : '<div class="card" style="font-size:14px;color:var(--muted)">Nothing owed. Every confirmed order is paid.</div>') +
     '<div class="section-title">WhatsApp messages</div><section class="card" style="display:flex;flex-direction:column;gap:14px">' +
@@ -1071,10 +1156,12 @@ var SITE_ACT = {
     ui.nDraft = null; toast('Notices saved'); rerender();
   }
 };
-function setPaid(o, amount) {
-  var prevA = o.paidAmount, prevP = o.paid;
+function setPaid(o, amount, payments) {
+  var prevA = o.paidAmount, prevP = o.paid, prevL = o.payments;
+  if (payments) o.payments = payments;
   o.paidAmount = Math.round(amount * 100) / 100; o.paid = isPaid(o); o.updatedAt = Date.now();
-  remote(CLOUD && sb.from('orders').update({ paid_amount: o.paidAmount, paid: o.paid }).eq('id', o.id), function () { o.paidAmount = prevA; o.paid = prevP; });
+  var upd = { paid_amount: o.paidAmount, paid: o.paid }; if (net.v25 || !CLOUD) upd.payments = toRow(o, ['payments']).payments;
+  remote(CLOUD && sb.from('orders').update(upd).eq('id', o.id), function () { o.paidAmount = prevA; o.paid = prevP; o.payments = prevL; });
   rerender(); toast(o.paid ? o.name + ' · paid in full' : money(o.paidAmount) + ' collected · ' + money(pendingAmt(o)) + ' pending');
 }
 function deleteOrder(o, done) {
@@ -1108,13 +1195,43 @@ var ACT = {
     toast(o.name + ': ' + STATUS[el.dataset.v]);
     rerender();
   },
-  payAdd: function (el) {
+  payAdd: function (el, ev, full) {
     var o = getOrder(el.dataset.id); if (!o) return; var due = pendingAmt(o);
-    modal({ title: 'Record a payment', text: o.name + ' · ' + money(collected(o)) + ' paid of ' + totalLabel(o) + ' · ' + money(due) + ' pending',
-      html: '<div class="field"><label for="payAmt">Amount received (€)</label><input class="input" id="payAmt" inputmode="decimal" value="' + (Math.round(due * 100) / 100) + '"></div>',
-      buttons: [{ label: 'Save payment', fn: function () { var v = num($('#payAmt').value); if (!(v > 0)) { toast('Enter the amount received'); return false; } setPaid(o, collected(o) + v); } }, { label: 'Cancel', kind: 'ghost' }] });
+    openPayModal(full ? 'Paid in full' : 'Record a payment', o.name + ' · ' + money(collected(o)) + ' paid of ' + totalLabel(o) + ' · ' + money(due) + ' pending', due, function (x) {
+      setPaid(o, collected(o) + x.amount, (o.payments || []).concat([x]));
+    });
   },
-  payFull: function (el) { var o = getOrder(el.dataset.id); if (o) setPaid(o, orderTotal(o)); },
+  payFull: function (el) { ACT.payAdd(el, null, true); },
+  payRemove: function (el) {
+    var o = getOrder(el.dataset.id); if (!o) return; var i = el.dataset.i;
+    var amt = i === 'earlier' ? earlierPaid(o) : num(o.payments[+i].amount);
+    ask('Remove this payment?', money(amt) + ' will go back to pending for ' + o.name + '.', 'Remove', function () {
+      var list = (o.payments || []).slice(); if (i !== 'earlier') list.splice(+i, 1);
+      var left = i === 'earlier' ? paySum(o) : Math.max(0, collected(o) - amt);
+      if (i === 'earlier') o.paid = false;
+      setPaid(o, left, list);
+    }, 'danger');
+  },
+  draftPayAdd: function () {
+    var d = draft; openPayModal('Record a payment', 'Total ' + totalLabel(d) + (collected(d) > 0 ? ' · ' + money(collected(d)) + ' already paid' : ''), pendingAmt(d), function (x) {
+      d.payments = (d.payments || []).concat([x]); d.paidAmount = Math.round((num(d.paidAmount) + x.amount) * 100) / 100; saveDraft(); rerender();
+    });
+  },
+  draftPayRemove: function (el) {
+    var d = draft, i = el.dataset.i;
+    if (i === 'earlier') { d.paidAmount = paySum(d); d.paid = false; } else { d.paidAmount = Math.max(0, num(d.paidAmount) - num(d.payments[+i].amount)); d.payments.splice(+i, 1); }
+    saveDraft(); rerender();
+  },
+  pmMode: function (el) {
+    var split = el.dataset.v === 'split';
+    el.parentNode.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === el)); });
+    $('#pmOne').hidden = split; $('#pmSplit').hidden = !split;
+  },
+  pmPick: function (el) { el.parentNode.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === el)); }); },
+  discType: function (el) {
+    var v = el.dataset.v; draft.discount = v ? { type: v, value: draft.discount ? draft.discount.value : '', note: draft.discount ? draft.discount.note : '' } : null;
+    saveDraft(); rerender(); if (v) setTimeout(function () { var f = $('#fDiscV'); if (f) f.focus(); }, 30);
+  },
   payReset: function (el) {
     var o = getOrder(el.dataset.id); if (!o) return;
     modal({ title: 'Change payment', text: 'Set how much ' + o.name + ' has paid in total for this order.',
@@ -1179,11 +1296,11 @@ var ACT = {
       if (ui.saving) return;
       ui.saving = true; if (el) { el.disabled = true; el.lastChild.textContent = 'Saving…'; }
       var isNew = d.key === 'new';
-      var q = isNew ? sb.from('orders').insert(Object.assign(toRow(d, ORDER_KEYS), { status: 'pending' })).select().single()
-                    : sb.from('orders').update(toRow(d, ORDER_KEYS)).eq('id', d.id).select().single();
+      var q = isNew ? sb.from('orders').insert(Object.assign(toRow(d, orderKeys()), { status: 'pending' })).select().single()
+                    : sb.from('orders').update(toRow(d, orderKeys())).eq('id', d.id).select().single();
       Promise.resolve(q).then(function (r) {
         if (r.error) throw r.error;
-        var o = fromRow(r.data); upsertLocalOrder(o); save(); clearDraft(); setOffline(false);
+        var o = fromRow(r.data); if (!net.v25) { o.payments = d.payments || []; o.discount = d.discount; } upsertLocalOrder(o); save(); clearDraft(); setOffline(false);
         toast(isNew ? 'Order saved · ' + o.ref : 'Changes saved');
         if (isNew) { ui.ordersTab = 'pending'; go('#/order/' + o.id, true); } else back('#/order/' + o.id);
       }).catch(function (e) {
@@ -1200,7 +1317,7 @@ var ACT = {
     } else {
       o = getOrder(d.id); if (!o) { toast('That order no longer exists'); return; }
     }
-    ['name', 'phone', 'source', 'items', 'mode', 'date', 'slot', 'slotOther', 'address', 'fee', 'notes', 'paidAmount'].forEach(function (k) { o[k] = d[k]; }); o.paidAmount = num(o.paidAmount); o.paid = isPaid(o);
+    ['name', 'phone', 'source', 'items', 'mode', 'date', 'slot', 'slotOther', 'address', 'fee', 'notes', 'paidAmount', 'payments', 'discount'].forEach(function (k) { o[k] = d[k]; }); o.paidAmount = num(o.paidAmount); o.paid = isPaid(o);
     o.name = o.name.trim(); o.updatedAt = now;
     save(); var wasNew = d.key === 'new'; clearDraft();
     toast(wasNew ? 'Order saved · ' + o.ref : 'Changes saved');
@@ -1304,7 +1421,7 @@ function legacyOrders() {
 function uploadOrders(list, done) {
   var have = {}; db.orders.forEach(function (o) { have[o.id] = 1; });
   var rows = list.filter(function (o) { return !have[o.id]; }).map(function (o) {
-    var r = toRow(o, ORDER_KEYS.concat(['status'])); if (!r.name) r.name = 'No name';
+    var r = toRow(o, orderKeys().concat(['status'])); if (!r.name) r.name = 'No name';
     if (o.createdAt) r.created_at = new Date(o.createdAt).toISOString();
     return r;
   });
@@ -1369,6 +1486,8 @@ document.addEventListener('input', function (e) {
     if (k === 'slot' || k === 'date') { rerender(); return; }
     var tot = $('#fTotal'); if (tot) tot.textContent = totalLabel(draft);
   }
+  if (t.id === 'pmA1' || t.id === 'pmA2') { var st = $('#pmSplitTot'); if (st) st.textContent = 'Total: ' + money(num($('#pmA1').value) + num($('#pmA2').value)); }
+  if (t.dataset.disc && draft && draft.discount) { draft.discount[t.dataset.disc] = t.value; saveDraft(); var ft = $('#fTotal'); if (ft) ft.textContent = totalLabel(draft); var fd = $('#fDisc'); if (fd) fd.textContent = discountAmt(draft) ? '−' + money(discountAmt(draft)) : ''; }
   if (t.dataset.line != null && draft) { draft.items[+t.dataset.line].price = t.value; saveDraft(); var tt = $('#fTotal'); if (tt) tt.textContent = totalLabel(draft); }
   if (t.dataset.setting) { db.settings[t.dataset.setting] = t.value; saveMessagesSoon(); }
   if (t.dataset.mk && ui.mDraft) ui.mDraft[t.dataset.mk] = t.type === 'checkbox' ? t.checked : t.value;
@@ -1384,13 +1503,14 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d
 document.addEventListener('submit', function (e) { if (e.target.id === 'loginForm') { e.preventDefault(); ACT.login(); } });
 
 /* ---------- start ---------- */
-if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded5')) {
+if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded6')) {
   db.orders = sampleOrders();
-  db.orders[3].paidAmount = 20; db.orders[3].paid = false;
+  db.orders[3].paidAmount = 20; db.orders[3].paid = false; db.orders[3].payments = [{ amount: 20, date: today(), parts: [{ method: 'Revolut', amount: 20 }] }];
+  if (db.orders[2]) { db.orders[2].discount = { type: 'percent', value: 10, note: 'Friends & family' }; }
   var t0 = today();
   db.offers = [];
   db.markets = [{"name": "Meeting House Square Food & Farmers Market", "kind": "Market", "status": "active", "place": "Temple Bar, Dublin 2", "address": "Meeting House Square, Temple Bar, Dublin 2", "days": [6], "startTime": "10:00", "endTime": "", "skipDates": ["2026-11-07"], "notes": "Pre-order on WhatsApp", "description": "Saturday crowds, warm cookies and plenty of new faces in the heart of Dublin."}, {"name": "Portobello Market", "kind": "Market", "status": "active", "place": "We Love Market, Portobello", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the Portobello market, run by the We Love Market team."}, {"name": "Boland's Mills Market", "kind": "Market", "status": "active", "place": "We Love Market, Grand Canal Dock", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at Boland's Mills, one of Dublin's best-known spots."}, {"name": "The Digital Hub Market", "kind": "Market", "status": "active", "place": "We Love Market, The Liberties", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at the Digital Hub, with fresh bakes for the teams and neighbours around it."}, {"name": "Taste of Dublin", "kind": "Festival", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall among the city's best food names, sharing our handmade bakes with thousands of food lovers."}, {"name": "Mountain View Market", "kind": "Market", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A friendly neighbourhood market where regulars started coming back every week."}, {"name": "Ireland Telugu Association", "kind": "Community", "status": "past", "place": "Community events", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Festival and community events with the Telugu community, with bakes that taste like home."}, {"name": "Cheese & Wine Festival", "kind": "Festival", "status": "past", "place": "The Bernard Shaw, Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A weekend of tastings and pairings at The Bernard Shaw, with our sweet side of the table."}].map(function (m, k) { return Object.assign({ id: newId(), mapsUrl: m.address ? mapsUrl(m.address) : '', startsOn: '', endsOn: '', active: true, sort: k }, m); });
-  save(); try { store.setItem('sbs.preview.seeded5', '1'); } catch (e) {}
+  save(); try { store.setItem('sbs.preview.seeded6', '1'); } catch (e) {}
 }
 if (!MEM && !location.hash) { try { history.replaceState(null, '', '#/orders'); } catch (e) {} }
 if (CLOUD) {
