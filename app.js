@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.5.1';
+var VERSION = '2.5.2';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -124,7 +124,7 @@ function fromRow(r) {
   var slot = r.slot || '', known = !slot || SLOTS.indexOf(slot) >= 0;
   return { id: r.id, ref: r.ref, status: r.status, source: r.source || 'other', name: r.name || '', phone: r.phone || '', mode: r.mode || 'collection',
     date: r.order_date || '', slot: known ? slot : 'other', slotOther: known ? '' : slot, address: r.address || '', fee: r.fee == null ? '' : String(+r.fee),
-    notes: r.notes || '', paid: !!r.paid, paidAmount: r.paid_amount == null ? 0 : +r.paid_amount, items: Array.isArray(r.items) ? r.items : [], payments: Array.isArray(r.payments) ? r.payments : [], discount: r.discount && num(r.discount.value) > 0 ? r.discount : null, createdAt: Date.parse(r.created_at) || 0, updatedAt: Date.parse(r.updated_at) || 0 };
+    notes: r.notes || '', paid: !!r.paid, paidAmount: r.paid_amount == null ? 0 : +r.paid_amount, items: Array.isArray(r.items) ? r.items : [], payments: 'payments' in r ? (Array.isArray(r.payments) ? r.payments : []) : ((typeof getOrder === 'function' && getOrder(r.id)) || {}).payments || [], discount: 'discount' in r ? (r.discount && num(r.discount.value) > 0 ? r.discount : null) : (((typeof getOrder === 'function' && getOrder(r.id)) || {}).discount || null), createdAt: Date.parse(r.created_at) || 0, updatedAt: Date.parse(r.updated_at) || 0 };
 }
 function toMenuRow(it, i) { return { id: it.id, cat: it.cat, name: it.name, description: it.description || null, allergens: it.allergens || [], badge: it.badge || null, tags: it.tags || [], options: it.options || [], includes: it.includes || [], active: it.active !== false, seasonal: !!it.seasonal, sort: i == null ? (it.sort || 0) : i }; }
 function fromMenuRow(r) { return { id: r.id, cat: r.cat, name: r.name, description: r.description || '', allergens: Array.isArray(r.allergens) ? r.allergens : [], badge: r.badge || '', tags: Array.isArray(r.tags) ? r.tags : [], options: r.options || [], includes: r.includes || [], active: !!r.active, seasonal: !!r.seasonal, sort: r.sort || 0 }; }
@@ -1197,13 +1197,25 @@ var SITE_ACT = {
     ui.nDraft = null; toast('Notices saved'); rerender();
   }
 };
+/* Payment methods need the 2.5 database update. If it is missing, say so clearly instead of failing silently;
+   if it has been run since the app opened, switch over and save the methods straight away. */
+var dbNoteShown = false;
+function needDbUpdate(o) {
+  if (!CLOUD || net.v25) return;
+  sb.from('orders').select('payments,discount').limit(1).then(function (r) {
+    if (!r.error) { net.v25 = true; if (o) sb.from('orders').update({ payments: toRow(o, ['payments']).payments, discount: toRow(o, ['discount']).discount }).eq('id', o.id).then(function () {}); return; }
+    if (dbNoteShown) return; dbNoteShown = true;
+    modal({ title: 'One-time database update needed', text: 'The payment method was saved on this phone only. Your Supabase database does not have the new payment columns yet, so other devices cannot see methods, dates or discounts. Run the 2.5 update in Supabase (SQL editor) once, then reopen the app.', buttons: [{ label: 'OK' }] });
+  });
+}
 function setPaid(o, amount, payments, status) {
   var prevA = o.paidAmount, prevP = o.paid, prevL = o.payments, prevS = o.status;
   if (payments) o.payments = payments; if (status) o.status = status;
   o.paidAmount = Math.round(amount * 100) / 100; o.paid = isPaid(o); o.updatedAt = Date.now();
   var upd = { paid_amount: o.paidAmount, paid: o.paid }; if (net.v25 || !CLOUD) upd.payments = toRow(o, ['payments']).payments; if (status) upd.status = status;
   remote(CLOUD && sb.from('orders').update(upd).eq('id', o.id), function () { o.paidAmount = prevA; o.paid = prevP; o.payments = prevL; o.status = prevS; });
-  rerender(); toast(o.paid ? o.name + ' · paid in full' : money(o.paidAmount) + ' collected · ' + money(pendingAmt(o)) + ' pending');
+  rerender(); toast(o.paid ? o.name + ' · paid in full' : money(o.paidAmount) + ' deposit · ' + money(pendingAmt(o)) + ' pending');
+  needDbUpdate(o);
 }
 function deleteOrder(o, done) {
   var before = db.orders.slice();
@@ -1375,7 +1387,7 @@ var ACT = {
                     : sb.from('orders').update(toRow(d, orderKeys())).eq('id', d.id).select().single();
       Promise.resolve(q).then(function (r) {
         if (r.error) throw r.error;
-        var o = fromRow(r.data); if (!net.v25) { o.payments = d.payments || []; o.discount = d.discount; } upsertLocalOrder(o); save(); clearDraft(); setOffline(false);
+        var o = fromRow(r.data); if (!net.v25) { o.payments = d.payments || []; o.discount = d.discount; if ((d.payments || []).length || d.discount) needDbUpdate(o); } upsertLocalOrder(o); save(); clearDraft(); setOffline(false);
         toast(isNew ? 'Order saved · ' + o.ref : 'Changes saved');
         if (isNew) { ui.ordersTab = 'pending'; go('#/order/' + o.id, true); } else back('#/order/' + o.id);
       }).catch(function (e) {
