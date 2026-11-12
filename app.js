@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.5.2';
+var VERSION = '2.6.0';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -633,7 +633,7 @@ function viewForm(key) {
   var slotSel = '<select class="input" id="fSlot" data-draft="slot">' + SLOTS.map(function (s) { return '<option' + (d.slot === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '<option value="other"' + (d.slot === 'other' ? ' selected' : '') + '>Other time…</option></select>';
   return topBack(isNew ? 'New order' : 'Edit order', isNew ? '' : d.ref, isNew ? '<button class="icon-btn" data-act="pasteOpen" aria-label="Paste WhatsApp message">' + I.paste + '</button>' : '') +
     '<main class="has-bar">' +
-    (isNew && !draftHasContent(d) ? '<button class="card" data-act="pasteOpen" style="border:1.5px dashed var(--line);display:flex;gap:12px;align-items:center;text-align:left;color:var(--ink)"><span class="mark" style="background:#DCF5E3;color:var(--green)">' + I.paste + '</span><span><b style="display:block;font-size:15px">Paste a WhatsApp order</b><span style="font-size:13px;color:var(--muted)">Copy the website order message in WhatsApp, then tap here to fill everything in.</span></span></button>' : '') +
+    (isNew && !draftHasContent(d) ? '<button class="card" data-act="pasteOpen" style="border:1.5px dashed var(--line);display:flex;gap:12px;align-items:center;text-align:left;color:var(--ink)"><span class="mark" style="background:#DCF5E3;color:var(--green)">' + I.paste + '</span><span><b style="display:block;font-size:15px">Paste an order</b><span style="font-size:13px;color:var(--muted)">Paste a WhatsApp message or your own notes. One order fills this form; several orders (one per line) are added together.</span></span></button>' : '') +
     (isNew && draftHasContent(d) ? '<div class="row" style="justify-content:space-between"><span class="hint" style="font-size:13px;color:var(--muted)">Unsaved order kept for you</span><button class="btn sm ghost" data-act="discard">Start over</button></div>' : '') +
     '<section class="card" style="display:flex;flex-direction:column;gap:14px">' +
       '<div class="field"><label for="fName">Customer name</label><input class="input" id="fName" data-draft="name" value="' + esc(d.name) + '" autocomplete="off" autocapitalize="words"' + (isNew && !d.name ? ' data-autofocus' : '') + '></div>' +
@@ -728,6 +728,124 @@ function parseMessage(txt) {
   });
   if (/savor by sree|place an order/i.test(t)) out.source = 'whatsapp';
   return out;
+}
+/* ---------- Your own shorthand notes ----------
+   "Monal: diwali hamper + 2 paneer tikka slider + ghee and candle - total 43 - col 23 - thursday - delivery - D24 DX05"
+   One order per line. Spelling slips are fine. */
+function lev(a, b) { if (a === b) return 0; var m = a.length, n = b.length, i, j, prev, row = []; if (Math.abs(m - n) > 2) return 3;
+  for (j = 0; j <= n; j++) row[j] = j;
+  for (i = 1; i <= m; i++) { prev = row[0]; row[0] = i; for (j = 1; j <= n; j++) { var t = row[j]; row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; } }
+  return row[n]; }
+function near(a, b) { a = a.replace(/s$/, ''); b = b.replace(/s$/, ''); return a === b || (Math.min(a.length, b.length) >= 4 && lev(a, b) <= (Math.min(a.length, b.length) >= 7 ? 2 : 1)); }
+function toks(t) { return String(t).toLowerCase().replace(/&/g, ' and ').replace(/[;'’.]/g, '').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(function (x) { return x && x !== 'and' && x !== 'of' && x !== 'the'; }); }
+function fuzzyMenu(name) {
+  var w = toks(name), best = null, bestScore = 0; if (!w.length) return null;
+  db.menu.forEach(function (it) {
+    if (it.cat === 'Add-ons') return;
+    var iw = toks(it.name); if (!iw.length) return;
+    var hits = iw.filter(function (x) { return w.some(function (y) { return near(x, y); }); }).length;
+    if (hits < iw.length) return;
+    var score = hits / Math.max(iw.length, w.length);
+    if (score > bestScore) { bestScore = score; best = it; }
+  });
+  return best && bestScore >= 0.6 ? best : null;
+}
+function cap(t) { t = String(t).trim(); return t.charAt(0).toUpperCase() + t.slice(1); }
+function parseShort(line) {
+  var m = String(line).match(/^\s*([A-Za-z][A-Za-z .'’]{1,30}?)\s*(?::|\s-\s)\s*(.+)$/); if (!m) return null;
+  if (/^(total|col|coll|collected|deposit|pending|pend|eircode|address|name|notes?|phone)$/i.test(m[1].trim()) || /https?$/i.test(m[1])) return null;
+  var rest = ' ' + m[2] + ' ', cut = rest.length, out = { name: m[1].trim().split(/\s+/).map(cap).join(' '), items: [], notes: '' };
+  var mark = function (mm) { if (mm && mm.index < cut) cut = mm.index; return mm; };
+  var n2 = function (x) { return num(String(x).replace(',', '.')); };
+  var tot = mark(rest.match(/[\s,\-]total\s*:?\s*€?\s*(\d+(?:[.,]\d+)?)/i)); if (tot) out.total = n2(tot[1]);
+  var dep = mark(rest.match(/[\s,\-](?:col|coll|collected|deposit|dep|advance|adv|paid)\s*:?\s*€?\s*(\d+(?:[.,]\d+)?)/i)); if (dep) out.deposit = n2(dep[1]);
+  mark(rest.match(/[\s,\-]pend\w*\s*:?\s*€?\s*\d/i));
+  var eir = mark(rest.match(/[\s,\-]((?:[AC-FHKNPRTV-Y]\d{2}|D6W)\s?[0-9AC-FHKNPRTV-Y]{4})\b(\s*\([^)]{2,30}\))?/i));
+  if (eir) { var e = eir[1].toUpperCase().replace(/\s+/g, ''); out.address = e.slice(0, 3) + ' ' + e.slice(3) + (eir[2] ? ' ' + eir[2].trim() : ''); }
+  var toks = [], re = /[A-Za-z]+/g, k;
+  while ((k = re.exec(rest))) toks.push({ w: k[0].toLowerCase(), i: k.index });
+  var t0 = today(), dow = parseIso(t0).getDay();
+  toks.forEach(function (tk) {
+    var w = tk.w;
+    if (!out.mode && (near(w, 'delivery') || w === 'deliver' || w === 'del')) { out.mode = 'delivery'; if (tk.i < cut) cut = tk.i; }
+    else if (!out.mode && (near(w, 'collection') || w === 'collect' || w === 'pickup')) { out.mode = 'collection'; if (tk.i < cut) cut = tk.i; }
+    if (!out.date) {
+      var di = -1; DAYS_LONG.forEach(function (d, i) { if (near(w, d.toLowerCase()) || w === d.slice(0, 3).toLowerCase() || (w === 'thurs' && i === 4) || (w === 'tues' && i === 2)) di = i; });
+      if (di >= 0) out.date = addDays(t0, (di - dow + 7) % 7);
+      else if (w === 'today') out.date = t0; else if (w === 'tomorrow' || w === 'tmrw') out.date = addDays(t0, 1);
+      if (out.date) { var pre = rest.slice(0, tk.i).match(/[\s,\-]for\s*$/i); var at = pre ? pre.index : tk.i; if (at < cut) cut = at; }
+    }
+  });
+  if (!out.date) { var dm = mark(rest.match(/[\s,\-](\d{1,2})\s*(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/i));
+    if (dm) { var mi = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(dm[2].toLowerCase()), now = new Date(), c = new Date(now.getFullYear(), mi, +dm[1]); if (c < new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60)) c.setFullYear(c.getFullYear() + 1); out.date = iso(c); } }
+  if (!out.mode) out.mode = out.address ? 'delivery' : 'collection';
+  var body = rest.slice(0, cut).replace(/[\s\-,:(]+$/, '').replace(/[\s\-,]*\b(?:eircode|address|for)\s*:?\s*$/i, '').replace(/[\s\-,:(]+$/, '').replace(/\s+-\s*(?:excluding|without|no)\s+([a-z ]+?)(?=\s*(?:\+|,|$))/gi, ' (no $1)');
+  body.split(/\s*\+\s*|\s*,\s*/).forEach(function (part) {
+    part = part.replace(/^[\s\-]+|[\s\-]+$/g, ''); if (!part) return;
+    var q = part.match(/^(\d{1,3})\s*[x×]?\s+(.+)$/i), qty = q ? +q[1] : 1, nm = q ? q[2] : part;
+    var extra = (nm.match(/\s*\((no [^)]+)\)\s*$/i) || [])[1] || ''; if (extra) nm = nm.replace(/\s*\(no [^)]+\)\s*$/i, '');
+    var it = fuzzyMenu(nm), op = it && it.options && it.options[0];
+    out.items.push(it ? { menuId: it.id, name: it.name, option: [op && op.label, extra].filter(Boolean).join(' · '), price: op ? num(op.price) : 0, qty: qty }
+                      : { menuId: null, name: cap(nm), option: extra, price: 0, qty: qty });
+  });
+  return out.items.length ? out : null;
+}
+/* Make the order add up to the total written in the note. */
+function fitTotal(d, total) {
+  if (!(total > 0)) return;
+  var sum = subtotal(d), free = d.items.filter(function (l) { return !(num(l.price) > 0); });
+  if (Math.abs(sum - total) < 0.005) return;
+  if (free.length && total - sum >= 0) { free[0].price = Math.round((total - sum) / free[0].qty * 100) / 100; return; }
+  if (sum > total) d.discount = { type: 'amount', value: Math.round((sum - total) * 100) / 100, note: 'Agreed price' };
+  else d.items.push({ menuId: null, name: 'Extra (as agreed)', option: '', price: Math.round((total - sum) * 100) / 100, qty: 1 });
+}
+function fillFromParsed(p) {
+  ['name', 'phone', 'mode', 'date', 'slot', 'slotOther', 'address', 'notes', 'source'].forEach(function (k) { if (p[k]) draft[k] = p[k]; });
+  if (p.items.length) draft.items = draft.items.concat(p.items);
+  saveDraft(); rerender();
+  var unknown = p.items.filter(function (l) { return !l.menuId; }).length;
+  toast('Filled in ' + p.items.length + ' item' + (p.items.length === 1 ? '' : 's') + (unknown ? ' · ' + unknown + ' not matched to the menu' : '') + '.');
+}
+function fillFromShort(p) {
+  var d = draft; d.name = p.name; d.items = d.items.concat(p.items); d.mode = p.mode; if (p.date) d.date = p.date; if (p.address) d.address = p.address;
+  if (p.mode === 'delivery' && d.fee === '') d.fee = 0;
+  fitTotal(d, p.total);
+  if (p.deposit > 0) { var full = p.deposit >= orderTotal(d) - 0.005; d.payPlan = full ? 'full' : 'deposit'; d.payAmt = full ? '' : p.deposit; d.payDate = today(); }
+  saveDraft(); rerender();
+  toast('Filled in from your note. Check it, pick the payment method, then save.');
+}
+function reviewBulk(list) {
+  var tot = list.reduce(function (t, d) { return t + orderTotal(d); }, 0), dep = list.reduce(function (t, d) { return t + collected(d); }, 0);
+  modal({ title: 'Found ' + list.length + ' orders', text: 'Total ' + money(tot) + ' · deposits ' + money(dep) + ' · pending ' + money(tot - dep) + '. They go in under To confirm; set each deposit’s payment method on the order.',
+    html: '<div class="bulk">' + list.map(function (d) {
+      var warn = [!d.date && 'no date', d.mode === 'delivery' && !d.address && 'no eircode', !(orderTotal(d) > 0) && 'no price'].filter(Boolean);
+      return '<div class="bulk-row"><div class="grow"><b>' + esc(d.name) + '</b><span>' + esc(d.items.map(function (l) { return l.qty + ' × ' + l.name + (/^no /i.test(l.option || '') || / · no /i.test(l.option || '') ? ' (' + String(l.option).split(' · ').pop() + ')' : ''); }).join(', ')) + '</span>' +
+        '<span>' + esc((d.date ? fmtDate(d.date) : 'No date') + ' · ' + (d.mode === 'delivery' ? 'Delivery' + (d.address ? ' ' + d.address : '') : 'Collection')) + '</span>' +
+        (warn.length ? '<em>Check: ' + warn.join(', ') + '</em>' : '') + '</div><div class="bulk-amt"><b>' + money(orderTotal(d)) + '</b><span>' + (collected(d) > 0 ? money(collected(d)) + ' dep.' : 'unpaid') + '</span></div></div>';
+    }).join('') + '</div>',
+    buttons: [{ label: 'Add ' + list.length + ' orders', fn: function () {
+      addOrdersBulk(list, function (n) { clearDraft(); ui.ordersTab = 'pending'; toast(n + ' orders added to To confirm'); go('#/orders', true); rerender(); });
+    } }, { label: 'Cancel', kind: 'ghost' }] });
+}
+function shortToOrder(p) {
+  var d = blankDraft(); d.name = p.name; d.items = p.items; d.mode = p.mode; d.date = p.date || ''; d.slot = ''; d.address = p.address || ''; d.notes = p.notes || ''; d.fee = p.mode === 'delivery' ? 0 : '';
+  fitTotal(d, p.total);
+  if (p.deposit > 0) { d.paidAmount = Math.min(p.deposit, orderTotal(d)); d.payments = [{ amount: d.paidAmount, date: '', parts: [] }]; }
+  d.paid = isPaid(d);
+  return d;
+}
+/* Adds several new orders (To confirm) in one go. */
+function addOrdersBulk(list, done) {
+  if (!CLOUD) {
+    list.forEach(function (d) { db.seq = (db.seq || 1000) + 1; var o = JSON.parse(JSON.stringify(d)); delete o.key; o.id = uid(); o.ref = 'SBS-' + db.seq; o.status = 'pending'; o.createdAt = Date.now(); db.orders.push(o); });
+    save(); done(list.length, 0); return;
+  }
+  var rows = list.map(function (d) { return Object.assign(toRow(d, orderKeys()), { status: 'pending' }); });
+  Promise.resolve(sb.from('orders').insert(rows).select()).then(function (r) {
+    if (r.error) throw r.error;
+    (r.data || []).forEach(function (row, i) { var o = fromRow(row); if (!net.v25) { o.payments = list[i].payments || []; o.discount = list[i].discount; } upsertLocalOrder(o); });
+    save(); setOffline(false); done((r.data || []).length, 0);
+  }).catch(function (e) { toast(netMsg(e) + ' Nothing was added.'); });
 }
 function words(s) { return String(s).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]/g, ' ').replace(/\bcookies?\b|\btray\b|\bcake\b/g, ' ').split(/\s+/).filter(Boolean); }
 function matchMenu(name, label) {
@@ -1354,16 +1472,15 @@ var ACT = {
   },
   discard: function () { ask('Start a new order?', 'The unsaved order will be cleared.', 'Clear it', function () { clearDraft(); ensureDraft('new'); rerender(); }, 'danger'); },
   pasteOpen: function () {
-    modal({ title: 'Paste the WhatsApp message', text: 'In WhatsApp, press and hold the order message, tap Copy, then paste it here.', html: '<textarea class="input" id="pasteBox" rows="9" placeholder="Hi Savor by Sree, I’d like to place an order…"></textarea>',
-      buttons: [{ label: 'Fill in the order', fn: function () {
-        var p = parseMessage($('#pasteBox').value);
-        if (!p.name && !p.items.length && !p.date) { toast('Couldn’t read that message. Fill the order in by hand.'); return false; }
-        ['name', 'phone', 'mode', 'date', 'slot', 'slotOther', 'address', 'notes', 'source'].forEach(function (k) { if (p[k]) draft[k] = p[k]; });
-        if (p.items.length) draft.items = draft.items.concat(p.items);
-        if (!draft.notes && p.notes) draft.notes = p.notes;
-        saveDraft(); rerender();
-        var unknown = p.items.filter(function (l) { return !l.menuId; }).length;
-        toast('Filled in ' + p.items.length + ' item' + (p.items.length === 1 ? '' : 's') + (unknown ? ' · ' + unknown + ' not matched to the menu' : '') + '. Add a phone number to reply.');
+    modal({ title: 'Paste an order', text: 'Paste the customer’s WhatsApp message, or your own notes. For several orders, put one on each line.',
+      html: '<textarea class="input" id="pasteBox" rows="8" placeholder="Monal: diwali hamper + 2 paneer tikka slider - total 43 - col 23 - thursday - delivery - D24 DX05"></textarea>',
+      buttons: [{ label: 'Read it', fn: function () {
+        var txt = $('#pasteBox').value, p = parseMessage(txt);
+        if (p.name || p.items.length) { fillFromParsed(p); return; }
+        var found = txt.split('\n').map(parseShort).filter(Boolean);
+        if (!found.length) { toast('Couldn’t read that. Try “Name: items - total 30 - col 15 - friday - collection”.'); return false; }
+        if (found.length === 1) { fillFromShort(found[0]); return; }
+        setTimeout(function () { reviewBulk(found.map(shortToOrder)); }, 0);
       } }, { label: 'Cancel', kind: 'ghost' }] });
   },
   saveOrder: function (el) {
@@ -1594,14 +1711,14 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d
 document.addEventListener('submit', function (e) { if (e.target.id === 'loginForm') { e.preventDefault(); ACT.login(); } });
 
 /* ---------- start ---------- */
-if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded8')) {
+if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded9')) {
   db.orders = sampleOrders();
   db.orders[3].paidAmount = 20; db.orders[3].paid = false; db.orders[3].payments = [{ amount: 20, date: today(), parts: [{ method: 'Revolut', amount: 20 }] }];
   if (db.orders[2]) { db.orders[2].discount = { type: 'percent', value: 10, note: 'Friends & family' }; }
   var t0 = today();
   db.offers = [];
   db.markets = [{"name": "Meeting House Square Food & Farmers Market", "kind": "Market", "status": "active", "place": "Temple Bar, Dublin 2", "address": "Meeting House Square, Temple Bar, Dublin 2", "days": [6], "startTime": "10:00", "endTime": "", "skipDates": ["2026-11-07"], "notes": "Pre-order on WhatsApp", "description": "Saturday crowds, warm cookies and plenty of new faces in the heart of Dublin."}, {"name": "Portobello Market", "kind": "Market", "status": "active", "place": "We Love Market, Portobello", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the Portobello market, run by the We Love Market team."}, {"name": "Boland's Mills Market", "kind": "Market", "status": "active", "place": "We Love Market, Grand Canal Dock", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at Boland's Mills, one of Dublin's best-known spots."}, {"name": "The Digital Hub Market", "kind": "Market", "status": "active", "place": "We Love Market, The Liberties", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at the Digital Hub, with fresh bakes for the teams and neighbours around it."}, {"name": "Taste of Dublin", "kind": "Festival", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall among the city's best food names, sharing our handmade bakes with thousands of food lovers."}, {"name": "Mountain View Market", "kind": "Market", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A friendly neighbourhood market where regulars started coming back every week."}, {"name": "Ireland Telugu Association", "kind": "Community", "status": "past", "place": "Community events", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Festival and community events with the Telugu community, with bakes that taste like home."}, {"name": "Cheese & Wine Festival", "kind": "Festival", "status": "past", "place": "The Bernard Shaw, Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A weekend of tastings and pairings at The Bernard Shaw, with our sweet side of the table."}].map(function (m, k) { return Object.assign({ id: newId(), mapsUrl: m.address ? mapsUrl(m.address) : '', startsOn: '', endsOn: '', active: true, sort: k }, m); });
-  save(); try { store.setItem('sbs.preview.seeded8', '1'); } catch (e) {}
+  save(); try { store.setItem('sbs.preview.seeded9', '1'); } catch (e) {}
 }
 if (!MEM && !location.hash) { try { history.replaceState(null, '', '#/orders'); } catch (e) {} }
 if (CLOUD) {
