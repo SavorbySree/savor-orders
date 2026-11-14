@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.6.2';
+var VERSION = '2.7.0';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -18,6 +18,7 @@ var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 var I = {
+  plan: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M8 15h3"/></svg>',
   plus: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   back: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
   cake: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21h14"/><path d="M6 21v-7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v7"/><path d="M6 16c2 1.2 4 1.2 6 0s4-1.2 6 0"/><path d="M12 12V8"/><path d="M12 5.5c.8-.8.8-2 0-2.5-.8.5-.8 1.7 0 2.5z"/></svg>',
@@ -83,12 +84,12 @@ function defaultSettings() {
   };
 }
 function defaultNotices() { return { topbar: '', topbarUntil: '', paused: false, pauseMessage: 'We’re not taking new orders right now. Message us on WhatsApp and we’ll let you know when we reopen.', closedDates: [], noticeDays: 2 }; }
-function fresh() { return { v: 1, seq: 1000, menu: defaultMenu(), orders: [], settings: defaultSettings(), bake: {}, offers: [], markets: [], notices: defaultNotices(), sections: null }; }
+function fresh() { return { v: 1, seq: 1000, menu: defaultMenu(), orders: [], settings: defaultSettings(), bake: {}, offers: [], markets: [], notices: defaultNotices(), sections: null, planner: [], planPrefs: { week: false, day: true, on: true } }; }
 var store = (function () { try { var t = '__t'; localStorage.setItem(t, t); localStorage.removeItem(t); return localStorage; } catch (e) { var mem = {}; return { getItem: function (k) { return mem[k] || null; }, setItem: function (k, v) { mem[k] = String(v); }, removeItem: function (k) { delete mem[k]; } }; } })();
 function load() {
   try {
     var d = JSON.parse(store.getItem(KEY));
-    if (d && d.menu && d.orders) { d.settings = Object.assign(defaultSettings(), d.settings || {}); d.bake = d.bake || {}; d.offers = d.offers || []; d.markets = d.markets || []; d.notices = Object.assign(defaultNotices(), d.notices || {}); d.sections = d.sections || null; return d; }
+    if (d && d.menu && d.orders) { d.settings = Object.assign(defaultSettings(), d.settings || {}); d.bake = d.bake || {}; d.planner = d.planner || []; d.planPrefs = d.planPrefs || { week: false, day: true, on: true }; d.offers = d.offers || []; d.markets = d.markets || []; d.notices = Object.assign(defaultNotices(), d.notices || {}); d.sections = d.sections || null; return d; }
   } catch (e) {}
   return fresh();
 }
@@ -203,6 +204,8 @@ function pull() {
       if (row.key === 'messages') db.settings = Object.assign(defaultSettings(), row.value || {});
       else if (row.key.indexOf('bake:') === 0) db.bake[row.key.slice(5)] = row.value || {};
       else if (row.key === 'menu:2026-11') menuDone = true;
+      else if (row.key === 'planner') db.planner = Array.isArray(row.value) ? row.value : [];
+      else if (row.key === 'planPrefs') db.planPrefs = Object.assign({ week: false, day: true, on: true }, row.value || {});
     });
     if (res[1].data.length && !menuDone) menuUpdateNov26();
     net.lastPull = Date.now(); setOffline(false); save(); softRender();
@@ -441,7 +444,7 @@ function tabsHtml(cur) {
   function t(id, href, label, icon, badge) {
     return '<a href="' + href + '" data-replace="1"' + (cur === id ? ' aria-current="page"' : '') + '><span class="badge">' + icon + (badge ? '<i>' + badge + '</i>' : '') + '</span>' + label + '</a>';
   }
-  return '<nav class="tabs" aria-label="Main"><span class="side-brand" aria-hidden="true"><img src="logo.jpg" alt="" width="52" height="52">Savor by Sree</span>' + t('orders', '#/orders', 'Orders', I.orders, pend) + t('today', '#/today', 'Today', I.today) + t('menu', '#/menu', 'Website', I.menu) + t('more', '#/more', 'More', I.more) + '</nav>';
+  return '<nav class="tabs" aria-label="Main"><span class="side-brand" aria-hidden="true"><img src="logo.jpg" alt="" width="52" height="52">Savor by Sree</span>' + t('orders', '#/orders', 'Orders', I.orders, pend) + t('today', '#/today', 'Today', I.today) + t('planner', '#/planner', 'Planner', I.plan, dueToday().length) + t('menu', '#/menu', 'Website', I.menu) + t('more', '#/more', 'More', I.more) + '</nav>';
 }
 function topBack(title, sub, right) {
   return '<header class="top"><div class="top-row top-inner"><button class="icon-btn" data-act="back" aria-label="Back">' + I.back + '</button><div class="grow">' + (sub ? '<div class="sub">' + esc(sub) + '</div>' : '') + '<h1>' + esc(title) + '</h1></div>' + (right || '') + '</div></header>';
@@ -488,6 +491,8 @@ function render() {
     else if (CLOUD && !net.user) html = viewLogin();
     else if (r === 'orders') html = viewOrders();
     else if (r === 'today') html = viewToday();
+    else if (r === 'planner') html = viewPlanner();
+    else if (r === 'plan') html = viewPlanEdit(parts[1] === 'new' ? null : parts[1]);
     else if (r === 'offers') html = viewOffers();
     else if (r === 'offer') html = viewOfferEdit(parts[1] === 'new' ? null : parts[1]);
     else if (r === 'markets') html = viewMarkets();
@@ -1127,6 +1132,63 @@ function viewOfferEdit(id) {
     '</form>' + (of ? '<button class="btn danger block" data-act="offerDelete" data-id="' + of.id + '">Delete offer</button>' : '') +
     '</main><div class="bar"><button class="btn block" data-act="offerSave" data-id="' + (of ? of.id : '') + '">' + I.check + 'Save offer</button></div>';
 }
+/* ---------- Planner: events, meetings and reminders for the business ----------
+   Kept with the other shared settings, so every device sees the same list. */
+var PLAN_KINDS = ['Event', 'Meeting', 'Reminder', 'Other'];
+var REMIND = [['week', 'A week before', 7], ['day', 'A day before', 1], ['on', 'On the day', 0]];
+function savePlanner() { save(); saveSetting('planner', db.planner); }
+function remindText(r) { var a = REMIND.filter(function (x) { return r && r[x[0]]; }).map(function (x) { return x[1].toLowerCase(); }); return a.length ? 'Remind: ' + a.join(', ') : 'No reminder'; }
+/* What needs attention today: planner items and orders whose reminder falls on today. */
+function dueToday() {
+  var t = today(), out = [];
+  var hit = function (date, r) { var w = null; REMIND.forEach(function (x) { if (r && r[x[0]] && addDays(date, -x[2]) === t) w = x[2] === 0 ? 'Today' : x[2] === 1 ? 'Tomorrow' : 'In a week'; }); return w; };
+  (db.planner || []).forEach(function (e) { if (e.done || !e.date) return; var w = hit(e.date, e.remind); if (w) out.push({ when: w, title: e.title, sub: e.kind + (e.time ? ' · ' + e.time : '') + (e.place ? ' · ' + e.place : ''), href: '#/plan/' + e.id, date: e.date }); });
+  db.orders.forEach(function (o) { if (!o.date || (o.status !== 'confirmed' && o.status !== 'ready')) return; var w = hit(o.date, db.planPrefs); if (w) out.push({ when: w, title: (o.name || 'Order') + ' · ' + (o.mode === 'delivery' ? 'delivery' : 'collection'), sub: 'Order · ' + totalLabel(o) + (pendingAmt(o) > 0 ? ' · ' + money(pendingAmt(o)) + ' pending' : ''), href: '#/order/' + o.id, date: o.date }); });
+  return out.sort(function (a, b) { return a.date.localeCompare(b.date); });
+}
+function dueCard() {
+  var due = dueToday(); if (!due.length) return '';
+  return '<section class="card due-card"><div class="section-title" style="margin:0 0 6px">Reminders for today <small>' + due.length + '</small></div>' + due.map(function (x) {
+    return '<a class="plan-row" href="' + x.href + '"><span class="when">' + x.when + '</span><span class="grow"><b>' + esc(x.title) + '</b><span>' + esc(x.sub) + '</span></span></a>'; }).join('') + '</section>';
+}
+function viewPlanner() {
+  var t = today(), f = ui.planFilter || 'All', rows = [];
+  (db.planner || []).forEach(function (e) { rows.push({ date: e.date || '', time: e.time || '', kind: e.kind || 'Event', title: e.title, sub: [e.time, e.place].filter(Boolean).join(' · '), rem: remindText(e.remind), href: '#/plan/' + e.id, done: !!e.done, id: e.id }); });
+  db.orders.forEach(function (o) { if (!o.date || o.status === 'cancelled' || o.status === 'delivered') return; rows.push({ date: o.date, time: '', kind: 'Order', title: (o.name || 'Order') + ' · ' + (o.mode === 'delivery' ? 'delivery' : 'collection'), sub: STATUS[o.status] + ' · ' + totalLabel(o), rem: '', href: '#/order/' + o.id, done: false }); });
+  rows = rows.filter(function (r) { return f === 'All' || (f === 'Orders' ? r.kind === 'Order' : r.kind === f.replace(/s$/, '')); });
+  rows.sort(function (a, b) { return (a.date || '9').localeCompare(b.date || '9') || (a.time || '').localeCompare(b.time || ''); });
+  var groups = [['Today', function (r) { return !r.done && r.date === t; }], ['Tomorrow', function (r) { return !r.done && r.date === addDays(t, 1); }], ['Next 7 days', function (r) { return !r.done && r.date > addDays(t, 1) && r.date <= addDays(t, 7); }], ['Later', function (r) { return !r.done && r.date > addDays(t, 7); }], ['No date', function (r) { return !r.done && !r.date; }], ['Done or past', function (r) { return r.done || (r.date && r.date < t); }]];
+  var html = groups.map(function (g) {
+    var list = rows.filter(g[1]); if (g[0] === 'Done or past') list = list.reverse().slice(0, 12); if (!list.length) return '';
+    return '<div class="section-title">' + g[0] + ' <small>' + list.length + '</small></div><section class="card plan-list">' + list.map(function (r) {
+      return '<div class="plan-row' + (g[0] === 'Done or past' ? ' past' : '') + '">' + (r.id ? '<button class="tick" data-act="planDone" data-id="' + r.id + '" aria-pressed="' + r.done + '" aria-label="' + (r.done ? 'Mark not done' : 'Mark done') + ': ' + esc(r.title) + '">' + (r.done ? I.check : '') + '</button>' : '<span class="tick ghost" aria-hidden="true"></span>') +
+        '<a class="grow" href="' + r.href + '"><b>' + esc(r.title) + '</b><span>' + esc([r.date && g[0] !== 'Today' && g[0] !== 'Tomorrow' ? fmtDate(r.date, true) : '', r.sub].filter(Boolean).join(' · ') || 'No details') + '</span>' + (r.rem ? '<span class="rem">' + esc(r.rem) + '</span>' : '') + '</a><span class="pill plan-k k-' + r.kind.toLowerCase() + '">' + r.kind + '</span></div>'; }).join('') + '</section>';
+  }).join('');
+  var chips = ['All', 'Events', 'Meetings', 'Reminders', 'Other', 'Orders'].map(function (c) { return '<button class="chip" data-act="planFilter" data-v="' + c + '" aria-pressed="' + (c === f) + '">' + c + '</button>'; }).join('');
+  var prefs = REMIND.map(function (x) { return '<button type="button" class="chip" data-act="planPref" data-v="' + x[0] + '" aria-pressed="' + !!db.planPrefs[x[0]] + '">' + x[1] + '</button>'; }).join('');
+  return '<header class="top hero"><div class="top-inner"><div class="top-row"><img class="logo" src="logo.jpg" alt="" width="44" height="44"><div class="brand grow"><b>Planner</b><small>Events, meetings and reminders</small></div><a class="icon-btn solid" href="#/plan/new" data-act="planNew" aria-label="Add to planner">' + I.plus + '</a></div><div class="chips" role="group" aria-label="Show">' + chips + '</div></div></header>' +
+    '<main>' + dueCard() + (html || '<div class="empty">' + I.plan + '<b>Nothing planned yet</b><p>Add a meeting, an event or a reminder so you don’t forget it.</p><a class="btn" href="#/plan/new" data-act="planNew">' + I.plus + 'Add to planner</a></div>') +
+    '<div class="section-title">Order reminders</div><section class="card" style="display:flex;flex-direction:column;gap:10px"><div class="wrap-chips" role="group" aria-label="Remind me about confirmed orders">' + prefs + '</div><p class="hint" style="margin:0">Confirmed orders show under “Reminders for today” at these times. Phone notifications come once Google Calendar is connected.</p></section>' +
+    '</main>' + tabsHtml('planner');
+}
+function viewPlanEdit(id) {
+  var e = id ? byId(db.planner, id) : null;
+  if (id && !e) { go('#/planner', true); return null; }
+  if (!ui.pDraft || ui.pDraft._for !== (id || 'new')) { ui.pDraft = JSON.parse(JSON.stringify(e || { title: '', kind: 'Event', date: today(), time: '', place: '', notes: '', remind: { week: false, day: true, on: true }, done: false })); ui.pDraft._for = id || 'new'; }
+  var v = ui.pDraft;
+  var kinds = PLAN_KINDS.map(function (k) { return '<button type="button" data-act="planKind" data-v="' + k + '" aria-pressed="' + (v.kind === k) + '">' + k + '</button>'; }).join('');
+  var rem = REMIND.map(function (x) { return '<button type="button" class="chip" data-act="planRemind" data-v="' + x[0] + '" aria-pressed="' + !!(v.remind && v.remind[x[0]]) + '">' + x[1] + '</button>'; }).join('');
+  return topBack(e ? 'Edit ' + v.kind.toLowerCase() : 'Add to planner', 'Planner') +
+    '<main class="has-bar"><form class="card" style="display:flex;flex-direction:column;gap:14px" onsubmit="return false">' +
+    '<div class="field"><span class="label">Type</span><div class="toggle four" role="group" aria-label="Type">' + kinds + '</div></div>' +
+    '<div class="field"><label for="plTitle">' + (v.kind === 'Reminder' ? 'Remind me to' : 'Title') + '</label><input class="input" id="plTitle" data-pl="title" value="' + esc(v.title) + '" placeholder="' + (v.kind === 'Meeting' ? 'e.g. Meet packaging supplier' : v.kind === 'Reminder' ? 'e.g. Order cake boxes' : 'e.g. Christmas market set-up') + '"' + (e ? '' : ' data-autofocus') + '></div>' +
+    '<div class="grid2"><div class="field"><label for="plDate">Date</label><input class="input" id="plDate" type="date" data-pl="date" value="' + esc(v.date) + '"></div><div class="field"><label for="plTime">Time <small>(optional)</small></label><input class="input" id="plTime" type="time" data-pl="time" value="' + esc(v.time) + '"></div></div>' +
+    (v.kind === 'Reminder' ? '' : '<div class="field"><label for="plPlace">Place <small>(optional)</small></label><input class="input" id="plPlace" data-pl="place" value="' + esc(v.place) + '" placeholder="e.g. Temple Bar, or a video call"></div>') +
+    '<div class="field"><label for="plNotes">Notes <small>(optional)</small></label><textarea class="input" id="plNotes" data-pl="notes" placeholder="Anything to remember">' + esc(v.notes) + '</textarea></div>' +
+    '<div class="field"><span class="label">Remind me</span><div class="wrap-chips" role="group" aria-label="Remind me">' + rem + '</div><span class="hint">It shows under “Reminders for today” in the Planner on those days.</span></div>' +
+    '</form>' + (e ? '<button class="btn danger block" data-act="planDelete" data-id="' + e.id + '">Delete</button>' : '') +
+    '</main><div class="bar"><button class="btn block" data-act="planSave" data-id="' + (e ? e.id : '') + '">' + I.check + 'Save</button></div>';
+}
 function viewMarkets() {
   var groups = [['active', 'Trading now', 'Shown on the website under “Where we’re trading”.'], ['upcoming', 'Upcoming', 'Shown on the website under “Coming up”.'], ['past', 'Past', 'Shown on the website in “Our story” only.']];
   var html = groups.map(function (g) {
@@ -1342,6 +1404,23 @@ var SITE_ACT = {
   },
   offerDelete: function (el) { ask('Delete this offer?', 'It disappears from the website. Orders already saved keep their prices.', 'Delete offer', function () { deleteRowFrom('offers', 'offers', el.dataset.id); back('#/offers'); }, 'danger'); },
   marketActive: function (el) { var m = byId(db.markets, el.dataset.id), v = el.checked; m.active = v; remote(CLOUD && sb.from('markets').update({ active: v }).eq('id', m.id), function () { m.active = !v; }); rerender(); },
+  planNew: function () { ui.pDraft = null; },
+  planFilter: function (el) { ui.planFilter = el.dataset.v; rerender(); },
+  planKind: function (el) { ui.pDraft.kind = el.dataset.v; rerender(); },
+  planRemind: function (el) { var r = ui.pDraft.remind || (ui.pDraft.remind = {}); r[el.dataset.v] = !r[el.dataset.v]; rerender(); },
+  planPref: function (el) { db.planPrefs[el.dataset.v] = !db.planPrefs[el.dataset.v]; save(); saveSetting('planPrefs', db.planPrefs); rerender(); },
+  planDone: function (el) { var e = byId(db.planner, el.dataset.id); if (!e) return; e.done = !e.done; savePlanner(); toast(e.done ? 'Done: ' + e.title : 'Back on the list'); rerender(); },
+  planSave: function (el) {
+    var v = ui.pDraft;
+    if (!String(v.title || '').trim()) { toast('Give it a title'); return; }
+    if (!v.date) { toast('Pick a date'); return; }
+    var e = el.dataset.id ? byId(db.planner, el.dataset.id) : null;
+    if (!e) { e = { id: uid() }; db.planner.push(e); }
+    var copy = JSON.parse(JSON.stringify(v)); delete copy._for; copy.id = e.id; copy.title = copy.title.trim(); if (copy.kind === 'Reminder') copy.place = '';
+    Object.assign(e, copy); savePlanner();
+    ui.pDraft = null; toast('Saved ' + e.title); back('#/planner');
+  },
+  planDelete: function (el) { ask('Delete this?', 'It is removed from the planner on every device.', 'Delete', function () { db.planner = db.planner.filter(function (x) { return x.id !== el.dataset.id; }); savePlanner(); ui.pDraft = null; back('#/planner'); }, 'danger'); },
   mkStatus: function (el) { ui.mDraft.status = el.dataset.v; rerender(); },
   dayToggle: function (el) { var d = +el.dataset.v, a = ui.mDraft.days || (ui.mDraft.days = []), i = a.indexOf(d); if (i >= 0) a.splice(i, 1); else a.push(d); rerender(); },
   skipAdd: function () { var x = $('#mkSkip').value; if (!x) { toast('Pick a date first'); return; } if (ui.mDraft.skipDates.indexOf(x) < 0) ui.mDraft.skipDates.push(x); rerender(); },
@@ -1755,6 +1834,7 @@ document.addEventListener('input', function (e) {
   if (t.dataset.line != null && draft) { draft.items[+t.dataset.line].price = t.value; saveDraft(); var tt = $('#fTotal'); if (tt) tt.textContent = totalLabel(draft); }
   if (t.dataset.setting) { db.settings[t.dataset.setting] = t.value; saveMessagesSoon(); }
   if (t.dataset.mk && ui.mDraft) ui.mDraft[t.dataset.mk] = t.type === 'checkbox' ? t.checked : t.value;
+  if (t.dataset.pl && ui.pDraft) ui.pDraft[t.dataset.pl] = t.value;
   if (t.dataset.bd && ui.bDraft) ui.bDraft[t.dataset.bd] = t.type === 'checkbox' ? t.checked : t.value;
   if (t.dataset.bl && ui.bDraft) ui.bDraft.lines[+t.dataset.i][t.dataset.bl] = t.value;
   if (t.dataset.nt && ui.nDraft) { ui.nDraft[t.dataset.nt] = t.type === 'checkbox' ? t.checked : t.value; if (t.dataset.nt === 'paused') rerender(); }
@@ -1767,14 +1847,20 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d
 document.addEventListener('submit', function (e) { if (e.target.id === 'loginForm') { e.preventDefault(); ACT.login(); } });
 
 /* ---------- start ---------- */
-if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded11')) {
+if (window.SBS_PREVIEW && !store.getItem('sbs.preview.seeded12')) {
   db.orders = sampleOrders();
   db.orders[3].paidAmount = 20; db.orders[3].paid = false; db.orders[3].payments = [{ amount: 20, date: today(), parts: [{ method: 'Revolut', amount: 20 }] }];
   if (db.orders[2]) { db.orders[2].discount = { type: 'percent', value: 10, note: 'Friends & family' }; }
   var t0 = today();
   db.offers = [];
   db.markets = [{"name": "Meeting House Square Food & Farmers Market", "kind": "Market", "status": "active", "place": "Temple Bar, Dublin 2", "address": "Meeting House Square, Temple Bar, Dublin 2", "days": [6], "startTime": "10:00", "endTime": "", "skipDates": ["2026-11-07"], "notes": "Pre-order on WhatsApp", "description": "Saturday crowds, warm cookies and plenty of new faces in the heart of Dublin."}, {"name": "Portobello Market", "kind": "Market", "status": "active", "place": "We Love Market, Portobello", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the Portobello market, run by the We Love Market team."}, {"name": "Boland's Mills Market", "kind": "Market", "status": "active", "place": "We Love Market, Grand Canal Dock", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at Boland's Mills, one of Dublin's best-known spots."}, {"name": "The Digital Hub Market", "kind": "Market", "status": "active", "place": "We Love Market, The Liberties", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall at the We Love Market at the Digital Hub, with fresh bakes for the teams and neighbours around it."}, {"name": "Taste of Dublin", "kind": "Festival", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Our stall among the city's best food names, sharing our handmade bakes with thousands of food lovers."}, {"name": "Mountain View Market", "kind": "Market", "status": "past", "place": "Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A friendly neighbourhood market where regulars started coming back every week."}, {"name": "Ireland Telugu Association", "kind": "Community", "status": "past", "place": "Community events", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "Festival and community events with the Telugu community, with bakes that taste like home."}, {"name": "Cheese & Wine Festival", "kind": "Festival", "status": "past", "place": "The Bernard Shaw, Dublin", "address": "", "days": [], "startTime": "", "endTime": "", "skipDates": [], "notes": "", "description": "A weekend of tastings and pairings at The Bernard Shaw, with our sweet side of the table."}].map(function (m, k) { return Object.assign({ id: newId(), mapsUrl: m.address ? mapsUrl(m.address) : '', startsOn: '', endsOn: '', active: true, sort: k }, m); });
-  save(); try { store.setItem('sbs.preview.seeded11', '1'); } catch (e) {}
+  db.planner = [
+    { id: 'p1', title: 'Order cake boxes', kind: 'Reminder', date: today(), time: '', place: '', notes: '', remind: { week: false, day: false, on: true }, done: false },
+    { id: 'p2', title: 'Meet packaging supplier', kind: 'Meeting', date: addDays(today(), 1), time: '11:00', place: 'Video call', notes: '', remind: { week: false, day: true, on: true }, done: false },
+    { id: 'p3', title: 'Christmas market set-up', kind: 'Event', date: addDays(today(), 7), time: '08:00', place: 'Temple Bar', notes: 'Bring the banner and card reader', remind: { week: true, day: true, on: true }, done: false },
+    { id: 'p4', title: 'Renew food stall insurance', kind: 'Other', date: addDays(today(), 20), time: '', place: '', notes: '', remind: { week: true, day: false, on: true }, done: false }
+  ];
+  save(); try { store.setItem('sbs.preview.seeded12', '1'); } catch (e) {}
 }
 if (!MEM && !location.hash) { try { history.replaceState(null, '', '#/orders'); } catch (e) {} }
 if (CLOUD) {

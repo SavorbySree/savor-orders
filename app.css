@@ -364,3 +364,25 @@ html,body{background:#FBF3E8}
 .flav-row:first-of-type{border-top:0}
 .add-btn.on{background:var(--green)}
 .xtra{font-style:normal;font-size:12px;font-weight:700;color:var(--warn);background:var(--sun);border-radius:999px;padding:2px 8px;margin-left:6px;white-space:nowrap}
+/* 2.7 planner */
+.plan-list{padding:4px 14px}
+.plan-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.plan-row:first-of-type{border-top:0}
+.plan-row a{text-decoration:none;color:inherit;min-width:0}
+.plan-row b{display:block;font-size:15px;font-weight:700;line-height:1.3}
+.plan-row .grow span{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-top:1px}
+.plan-row .grow .rem{font-weight:500}
+.plan-row.past b{color:var(--muted);font-weight:600}
+.tick{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;padding:0;position:relative}
+.tick::after{content:"";position:absolute;inset:-9px}
+.tick[aria-pressed=true]{background:var(--green);border-color:var(--green)}
+.tick svg{width:16px;height:16px}
+.tick.ghost{border-style:dashed;cursor:default}
+.plan-k{height:22px;font-size:11px;flex:none}
+.k-order{background:var(--sun);color:var(--warn)}.k-meeting{background:var(--blue-bg);color:var(--blue)}.k-event{background:var(--green-bg);color:var(--green)}.k-reminder,.k-other{background:var(--grey-bg);color:var(--grey)}
+.due-card{border:1.5px solid var(--orange);background:var(--sun)}
+.due-card .plan-row{border-color:#F5D9A8}
+.due-card .when{flex:none;min-width:74px;text-align:center;font-size:12px;font-weight:700;color:var(--brown);background:#fff;border-radius:999px;padding:6px 8px}
+.toggle.four button{font-size:13px;padding-left:4px;padding-right:4px}
+.tabs a{font-size:10.5px}
+.hero .top-row + .chips{margin-top:12px}
