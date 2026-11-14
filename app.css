@@ -363,3 +363,4 @@ html,body{background:#FBF3E8}
 .flav-row{display:flex;align-items:center;gap:10px;min-height:52px;border-top:1px solid var(--line);font-size:15px;font-weight:600}
 .flav-row:first-of-type{border-top:0}
 .add-btn.on{background:var(--green)}
+.xtra{font-style:normal;font-size:12px;font-weight:700;color:var(--warn);background:var(--sun);border-radius:999px;padding:2px 8px;margin-left:6px;white-space:nowrap}
