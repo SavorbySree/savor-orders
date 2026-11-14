@@ -354,3 +354,12 @@ html,body{background:#FBF3E8}
 .bulk-row b{font-size:14px}.bulk-row span{display:block;font-size:12px;color:var(--muted);font-weight:600;line-height:1.35}
 .bulk-row em{display:block;font-style:normal;font-size:12px;font-weight:700;color:var(--warn);margin-top:2px}
 .bulk-amt{text-align:right;flex:none}
+/* 2.6.1 cake picker: size first, then flavour */
+.size-row{display:flex;gap:8px}
+.size-btn{flex:1;min-height:60px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;padding:6px}
+.size-btn b{font-size:15px}.size-btn span{font-size:13px;font-weight:600;color:var(--muted)}
+.size-btn[aria-pressed=true]{background:linear-gradient(180deg,#7E4500,#5E3300);border-color:transparent;color:#fff;box-shadow:0 4px 12px rgba(109,59,0,.22)}
+.size-btn[aria-pressed=true] span{color:rgba(255,255,255,.85)}
+.flav-row{display:flex;align-items:center;gap:10px;min-height:52px;border-top:1px solid var(--line);font-size:15px;font-weight:600}
+.flav-row:first-of-type{border-top:0}
+.add-btn.on{background:var(--green)}
