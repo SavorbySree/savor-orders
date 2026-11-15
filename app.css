@@ -407,3 +407,4 @@ label.btn{position:relative;cursor:pointer}
 .ph-tile .btns{flex:none;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:430px){.segl{padding:0 8px;font-size:12.5px}}
 .flav-head{margin:12px 0 2px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.note-photo{display:flex;align-items:center;gap:10px;margin:8px 0 2px;text-decoration:none;color:var(--brown);font-weight:700;font-size:14px}.note-photo img{width:96px;height:96px;border-radius:12px;object-fit:cover;background:#EADCC8}

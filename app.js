@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.9.0';
+var VERSION = '2.9.1';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -647,7 +647,7 @@ function viewDetail(id) {
       '<div><dt>Phone</dt><dd>' + esc(o.phone || 'Not added') + '</dd></div><div><dt>Payment</dt><dd style="color:' + (isPaid(o) ? 'var(--green)' : 'var(--warn)') + '">' + (payState(o) === 'paid' ? 'Paid' : payState(o) === 'part' ? 'Part paid' : 'Not paid yet') + '</dd></div>' +
       (o.mode === 'delivery' ? '<div style="grid-column:1/-1"><dt>Address / Eircode</dt><dd>' + esc(o.address || 'Not added') + '</dd></div>' : '') + '</dl>' + links + '</section>' +
     '<section class="card"><div class="section-title" style="margin:0 0 8px">Items</div>' + lines + '<div style="margin-top:8px">' + sums + '</div></section>' +
-    (o.notes ? '<section class="card"><div class="section-title" style="margin:0 0 8px">Notes</div><div class="note">' + esc(o.notes) + '</div></section>' : '') +
+    (o.notes ? '<section class="card"><div class="section-title" style="margin:0 0 8px">Notes</div><div class="note">' + noteHtml(o.notes) + '</div></section>' : '') +
     '<section class="card" style="display:flex;flex-direction:column;gap:12px"><div class="section-title" style="margin:0">Payment ' + payPill(o) + '</div>' +
       '<div class="paygrid"><div><small>Total</small><b>' + esc(totalLabel(o)) + '</b></div><div><small>' + midLabel(o) + '</small><b class="ok">' + money(collected(o)) + '</b></div><div><small>Pending</small><b class="' + (pendingAmt(o) > 0 ? 'due' : 'ok') + '">' + money(pendingAmt(o)) + '</b></div></div>' +
       payCardHtml(o) +
@@ -1327,6 +1327,13 @@ function viewNotices() {
       '<div class="field"><label for="nDays">Notice customers must give</label><select class="input" id="nDays" data-nt="noticeDays">' + nd + '</select><span class="hint">The website won’t offer dates sooner than this.</span></div>' +
       '<div class="field"><span class="label">Closed dates (no collections or deliveries)</span><div class="wrap-chips">' + (closed || '<span class="hint">None</span>') + '</div><div class="opt-row"><label class="sr" for="nClosed">Closed date</label><input class="input" id="nClosed" type="date"><button type="button" class="btn sm ghost" data-act="closedAdd">Add date</button></div></div></section>' +
     '</main><div class="bar over-tabs"><button class="btn block" data-act="noticesSave">' + I.check + 'Save notices</button></div>' + tabsHtml('menu');
+}
+
+/* Order notes: a customer's cake reference photo arrives as a link from the website; show it as a picture you can tap. */
+function noteHtml(t) {
+  return esc(t).replace(/https:\/\/[a-z0-9.-]+\/storage\/v1\/object\/public\/order-photos\/[A-Za-z0-9\/_.-]+\.jpg/g, function (u) {
+    return '<a class="note-photo" href="' + u + '" target="_blank" rel="noopener"><img src="' + u + '" alt="Customer reference photo" loading="lazy"><span>Open photo</span></a>';
+  });
 }
 
 /* ---------- Website photos: the gallery album and the pictures on tiles ----------
