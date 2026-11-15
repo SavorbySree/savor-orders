@@ -164,6 +164,11 @@ var gcal = { state: 'unknown', last: null, busy: false, timer: 0 };   // unknown
 function gcalOn() { try { return store.getItem('sbs.gcal') === '1'; } catch (e) { return false; } }
 function gcalFlag(on) { try { if (on) store.setItem('sbs.gcal', '1'); else store.removeItem('sbs.gcal'); } catch (e) {} }
 function gcalCall(action) {
+  if (window.SBS_PREVIEW) {   // preview only: pretend, nothing is sent anywhere
+    if (action === 'url') { gcal.demo = true; return Promise.resolve({ url: '#' }); }
+    if (action === 'disconnect') gcal.demo = false;
+    return Promise.resolve(gcal.demo ? { connected: true, created: action === 'sync' ? 3 : 0, at: new Date().toISOString() } : { connected: false });
+  }
   if (!CLOUD || !sb.functions) return Promise.resolve({ unavailable: true });
   return Promise.resolve(sb.functions.invoke('gcal', { body: { action: action } })).then(function (r) {
     if (r.error) { var st = r.error.context && r.error.context.status; return st && st !== 404 ? { failed: true } : { unavailable: true }; }
@@ -188,7 +193,7 @@ function gcalSync(manual, round) {
 /* Called after every saved change; waits a few seconds so a burst of edits becomes one sync. */
 function queueGcal() { if (!CLOUD || !gcalOn()) return; clearTimeout(gcal.timer); gcal.timer = setTimeout(function () { gcalSync(false); }, 4000); }
 function gcalCard() {
-  if (!CLOUD) return '';
+  if (!CLOUD && !window.SBS_PREVIEW) return '';
   if (gcal.state === 'unknown') { gcalStatus(); }
   var body, when = gcal.last && gcal.last.at ? new Date(gcal.last.at) : null;
   if (gcal.state === 'unknown') body = '<p class="hint" style="margin:0">Checking the connection…</p>';
@@ -1317,7 +1322,7 @@ function viewMore() {
       '<div class="field"><label for="sReady">Ready</label><textarea class="input" id="sReady" data-setting="readyMsg">' + esc(s.readyMsg) + '</textarea></div>' +
       '<div class="field"><label for="sWay">On my way (deliveries)</label><textarea class="input" id="sWay" data-setting="onwayMsg">' + esc(s.onwayMsg) + '</textarea></div>' +
       '<button class="btn sm ghost" data-act="resetMsgs">Reset to the original wording</button></section>' +
-    (CLOUD ? cloudSection() :
+    (CLOUD ? cloudSection() : gcalCard() +
     '<div class="section-title">Backup and the other phone</div><section class="card" style="display:flex;flex-direction:column;gap:10px">' +
       '<p style="margin:0;font-size:14px;line-height:1.5;color:#4A3218">Orders are saved on this phone only. Copy a backup and keep it in WhatsApp (message yourself) or Notes. Paste it on the other phone to bring the orders across.</p>' +
       '<button class="btn block" data-act="backupCopy">Copy backup</button><button class="btn block ghost" data-act="restoreOpen">Paste a backup</button></section>' +
