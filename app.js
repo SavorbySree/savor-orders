@@ -261,6 +261,7 @@ function pull() {
     });
     if (res[1].data.length && !menuDone) menuUpdateNov26();
     if (res[1].data.length && !menuDoneB) menuUpdateNov26b();
+    fixCheesecakeLine();
     net.lastPull = Date.now(); setOffline(false); save(); softRender();
   }).catch(function (e) {
     var m = String((e && e.message) || e);
@@ -961,6 +962,14 @@ function menuUpdateNov26b() {
     if (!r.error) return sb.from('settings').upsert({ key: 'menu:2026-11b', value: true });
   }).catch(function () {});
 }
+/* The regular cheesecakes are not baked (only the Basque ones are): correct the old website tagline if it is still in use. */
+function fixCheesecakeLine() {
+  if (!Array.isArray(db.sections)) return;
+  var hit = db.sections.filter(function (x) { return x && x.line === 'Creamy, baked fresh, never from a shelf.'; });
+  if (!hit.length) return;
+  hit.forEach(function (x) { x.line = 'Creamy, chilled and set, made fresh to order.'; });
+  if (CLOUD) sb.from('site_content').upsert({ key: 'sections', value: db.sections }).then(function () {}, function () {});
+}
 function menuUpdateNov26() {
   var extra = { 'rasmalai-cake': [10, 15], 'ferrero-rocher-cake': [5, 10] }, changed = [];
   var ref = db.menu.filter(function (x) { return x.id === 'classic-vanilla-cake'; })[0] || db.menu.filter(function (x) { return x.cat === 'Cakes'; })[0];
@@ -1158,7 +1167,7 @@ function viewBundleEdit(id, type) {
 var DEFAULT_SECTIONS = [
   { key: 'Cookies', id: 'cookies', title: 'Chunky NYC Cookies', line: 'Gooey in the middle, crisp at the edges.', active: true },
   { key: 'Brownies', id: 'brownies', title: 'Brownies', line: 'Fudgy, rich and made to order.', active: true },
-  { key: 'Cheesecakes', id: 'cheesecakes', title: 'Cheesecakes', line: 'Creamy, baked fresh, never from a shelf.', active: true },
+  { key: 'Cheesecakes', id: 'cheesecakes', title: 'Cheesecakes', line: 'Creamy, chilled and set, made fresh to order.', active: true },
   { key: 'Basque', id: 'basque', title: 'Burnt Basque Cheesecakes', line: 'Burnt on top, silky inside.', active: true },
   { key: 'Tiramisu', id: 'tiramisu', title: 'Tiramisu', line: 'Layered by hand and set overnight.', active: true },
   { key: 'Tres Leches', id: 'tresleches', title: 'Tres Leches', line: 'Soaked in three milks, topped with fruit.', active: true },
