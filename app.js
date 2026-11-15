@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.7.0';
+var VERSION = '2.8.0';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -157,6 +157,47 @@ function netMsg(e) {
   return 'Couldn’t save: ' + m;
 }
 /* Run a change online. The screen updates straight away; if the save fails it is put back and a message explains why. */
+/* ---------- Google Calendar ----------
+   The Google sign-in and the syncing live in a small Supabase function ("gcal"); the app only asks it to connect, sync or disconnect.
+   Until that function is set up, this section says so and nothing else changes. */
+var gcal = { state: 'unknown', last: null, busy: false, timer: 0 };   // unknown | off (not set up) | ready (not connected) | on
+function gcalOn() { try { return store.getItem('sbs.gcal') === '1'; } catch (e) { return false; } }
+function gcalFlag(on) { try { if (on) store.setItem('sbs.gcal', '1'); else store.removeItem('sbs.gcal'); } catch (e) {} }
+function gcalCall(action) {
+  if (!CLOUD || !sb.functions) return Promise.resolve({ unavailable: true });
+  return Promise.resolve(sb.functions.invoke('gcal', { body: { action: action } })).then(function (r) {
+    if (r.error) { var st = r.error.context && r.error.context.status; return st && st !== 404 ? { failed: true } : { unavailable: true }; }
+    return r.data || {};
+  }, function () { return { failed: true }; });
+}
+function gcalApply(d) {
+  if (d.unavailable) { gcal.state = 'off'; gcalFlag(false); }
+  else if (d.failed || d.error) { if (gcal.state === 'unknown') gcal.state = gcalOn() ? 'on' : 'ready'; }
+  else { gcal.state = d.connected ? 'on' : 'ready'; gcalFlag(!!d.connected); if (d.last) gcal.last = d.last; if (d.at) gcal.last = d; }
+}
+function gcalStatus(then) { gcalCall('status').then(function (d) { gcalApply(d); softRender(); if (then) then(d); }); }
+function gcalSync(manual, round) {
+  if (gcal.busy) return; gcal.busy = true; if (manual) softRender();
+  gcalCall('sync').then(function (d) {
+    gcal.busy = false; gcalApply(d);
+    if (d.more && (round || 0) < 5) { gcalSync(manual, (round || 0) + 1); return; }
+    if (manual) toast(d.failed || d.error ? 'Could not reach Google Calendar. Try again in a minute.' : d.connected ? 'Calendar is up to date' + (d.created || d.updated || d.removed ? ' · ' + [d.created && d.created + ' added', d.updated && d.updated + ' updated', d.removed && d.removed + ' removed'].filter(Boolean).join(', ') : '') : (d.reason || 'Google Calendar is not connected'));
+    softRender();
+  });
+}
+/* Called after every saved change; waits a few seconds so a burst of edits becomes one sync. */
+function queueGcal() { if (!CLOUD || !gcalOn()) return; clearTimeout(gcal.timer); gcal.timer = setTimeout(function () { gcalSync(false); }, 4000); }
+function gcalCard() {
+  if (!CLOUD) return '';
+  if (gcal.state === 'unknown') { gcalStatus(); }
+  var body, when = gcal.last && gcal.last.at ? new Date(gcal.last.at) : null;
+  if (gcal.state === 'unknown') body = '<p class="hint" style="margin:0">Checking the connection…</p>';
+  else if (gcal.state === 'off') body = '<p style="margin:0;font-size:14px;line-height:1.5;color:#4A3218">Not set up yet. Connecting needs a one-time setup in Google and Supabase. Once that is done, a Connect button appears here.</p><button class="btn block ghost" data-act="gcalCheck">Check again</button>';
+  else if (gcal.state === 'ready') body = '<p style="margin:0;font-size:14px;line-height:1.5;color:#4A3218">Add confirmed orders and your planner to Google Calendar, with reminders a week before, a day before and on the day.</p><button class="btn block" data-act="gcalConnect">Connect Google Calendar</button>';
+  else body = '<p style="margin:0;font-size:14px;line-height:1.5;color:#4A3218"><b style="color:var(--green)">Connected.</b> Confirmed orders and planner entries are added to your Google Calendar and kept up to date.' + (when ? ' Last synced ' + esc(fmtDate(iso(when), true)) + ' at ' + ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2) + '.' : '') + '</p>' +
+    '<div class="btns"><button class="btn sm" data-act="gcalSyncNow"' + (gcal.busy ? ' disabled' : '') + '>' + (gcal.busy ? 'Syncing…' : 'Sync now') + '</button><button class="btn sm ghost" data-act="gcalDisconnect">Disconnect</button></div>';
+  return '<div class="section-title">Google Calendar</div><section class="card" style="display:flex;flex-direction:column;gap:10px">' + body + '</section>';
+}
 function remote(q, undo, ok) {
   if (!CLOUD) { save(); return; }
   save();
@@ -164,7 +205,7 @@ function remote(q, undo, ok) {
     if (r && r.error) throw r.error;
     setOffline(false);
     if (ok) ok(r ? r.data : null);
-    save();
+    save(); queueGcal();
   }).catch(function (e) {
     if (undo) undo();
     save(); softRender(true); toast(netMsg(e));
@@ -1291,7 +1332,7 @@ function viewMore() {
 }
 function cloudSection() {
   var legacy = legacyOrders();
-  return '<div class="section-title">Your account</div><section class="card" style="display:flex;flex-direction:column;gap:10px">' +
+  return gcalCard() + '<div class="section-title">Your account</div><section class="card" style="display:flex;flex-direction:column;gap:10px">' +
       '<p style="margin:0;font-size:14px;line-height:1.5;color:#4A3218">Logged in as <b>' + esc(net.user && net.user.email || '') + '</b>. Orders are shared by every phone and computer you log in on, and update live.</p>' +
       '<p style="margin:0;font-size:13px;color:var(--muted)">' + (net.offline ? 'Offline right now.' : 'Last updated ' + (net.lastPull ? new Date(net.lastPull).toLocaleTimeString('en-IE', { hour: 'numeric', minute: '2-digit' }) : 'just now') + '.') + '</p>' +
       '<div class="btns"><button class="btn sm ghost" data-act="refresh">Refresh now</button><button class="btn sm danger" data-act="logout">Log out</button></div></section>' +
@@ -1639,7 +1680,7 @@ var ACT = {
                     : sb.from('orders').update(toRow(d, orderKeys())).eq('id', d.id).select().single();
       Promise.resolve(q).then(function (r) {
         if (r.error) throw r.error;
-        var o = fromRow(r.data); if (!net.v25) { o.payments = d.payments || []; o.discount = d.discount; if ((d.payments || []).length || d.discount) needDbUpdate(o); } upsertLocalOrder(o); save(); clearDraft(); setOffline(false);
+        var o = fromRow(r.data); if (!net.v25) { o.payments = d.payments || []; o.discount = d.discount; if ((d.payments || []).length || d.discount) needDbUpdate(o); } upsertLocalOrder(o); queueGcal(); save(); clearDraft(); setOffline(false);
         toast(isNew ? 'Order saved · ' + o.ref : 'Changes saved');
         if (isNew) { ui.ordersTab = 'pending'; go('#/order/' + o.id, true); } else back('#/order/' + o.id);
       }).catch(function (e) {
@@ -1721,11 +1762,27 @@ var ACT = {
       btn.disabled = false; btn.textContent = 'Log in';
     });
   },
+  gcalCheck: function () { gcal.state = 'unknown'; rerender(); },
+  gcalSyncNow: function () { gcalSync(true); },
+  gcalConnect: function () {
+    gcalCall('url').then(function (d) {
+      if (!d.url) { gcalApply(d); toast('Could not start the Google sign-in. Try again in a minute.'); rerender(); return; }
+      gcal.waiting = true;
+      modal({ title: 'Connect Google Calendar', text: 'Google opens in your browser. Choose your account and allow access to your calendar events. Then come back to this app.',
+        html: '<a class="btn block" id="gcalGo" href="' + esc(d.url) + '" target="_blank" rel="noopener">Continue to Google</a>',
+        buttons: [{ label: 'I have connected', kind: 'ghost', fn: function () { gcalStatus(function (x) { if (x.connected) { toast('Google Calendar is connected'); gcalSync(false); } else toast('Not connected yet'); }); } }, { label: 'Cancel', kind: 'ghost' }] });
+    });
+  },
+  gcalDisconnect: function () {
+    ask('Disconnect Google Calendar?', 'New orders and planner entries will stop going to your calendar. Events already in your calendar stay there.', 'Disconnect', function () {
+      gcalCall('disconnect').then(function (d) { gcalApply(d); toast(d.failed ? 'Could not disconnect. Try again in a minute.' : 'Google Calendar disconnected'); rerender(); });
+    }, 'danger');
+  },
   logout: function () {
     ask('Log out of this device?', 'The saved copy of your orders is cleared from this device. Your orders stay safe online.', 'Log out', function () {
       if (net.chan) { try { sb.removeChannel(net.chan); } catch (e) {} net.chan = null; }
       sb.auth.signOut().then(function () {}, function () {});
-      net.user = null; db = fresh(); db.menu = []; store.removeItem(KEY); clearDraft(); render();
+      net.user = null; db = fresh(); db.menu = []; store.removeItem(KEY); gcalFlag(false); gcal.state = 'unknown'; gcal.last = null; clearDraft(); render();
     });
   },
   uploadLocal: function () {
@@ -1870,7 +1927,7 @@ if (CLOUD) {
     net.checked = true; render(); if (net.user) startCloud();
   }, function () { net.checked = true; render(); });
   sb.auth.onAuthStateChange(function (ev, session) { if (ev === 'SIGNED_OUT' && net.user) { net.user = null; render(); } });
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && net.user && Date.now() - net.lastPull > 15000) pull(); });
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && net.user && Date.now() - net.lastPull > 15000) pull(); if (document.visibilityState === 'visible' && gcal.waiting) { gcal.waiting = false; gcalStatus(function (x) { if (x.connected) { closeModal(); toast('Google Calendar is connected'); gcalSync(false); } }); } });
   window.addEventListener('online', function () { if (net.user) pull(); });
   window.addEventListener('offline', function () { setOffline(true); });
 }
