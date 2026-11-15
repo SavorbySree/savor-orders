@@ -6,7 +6,7 @@
 var LEGACY_KEY = 'sbs.data.v1', DRAFT_KEY = 'sbs.draft.v1';
 var CLOUD = !!(window.SBS_CONFIG && window.SBS_CONFIG.url && window.supabase && window.supabase.createClient);
 var KEY = CLOUD ? 'sbs.cloud.v1' : LEGACY_KEY;
-var VERSION = '2.8.0';
+var VERSION = '2.8.1';
 var SLOTS = ['5–6 pm', '6–7 pm', '7–8 pm', '8–9 pm', '9–10 pm', '10–11 pm'];
 var SOURCES = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['website', 'Website'], ['phone', 'Phone call'], ['market', 'Market'], ['other', 'Other']];
 var STATUS = { pending: 'To confirm', confirmed: 'Confirmed', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -171,7 +171,12 @@ function gcalCall(action) {
   }
   if (!CLOUD || !sb.functions) return Promise.resolve({ unavailable: true });
   return Promise.resolve(sb.functions.invoke('gcal', { body: { action: action } })).then(function (r) {
-    if (r.error) { var st = r.error.context && r.error.context.status; return st && st !== 404 ? { failed: true } : { unavailable: true }; }
+    if (r.error) {
+      var cx = r.error.context, st = cx && cx.status;
+      if (!st || st === 404) return { unavailable: true };
+      /* the function explains what went wrong in its reply; show that instead of a generic message */
+      return Promise.resolve(cx.json ? cx.json() : {}).then(function (j) { return { failed: true, reason: (j && j.error) || ('Error ' + st) }; }, function () { return { failed: true, reason: 'Error ' + st }; });
+    }
     return r.data || {};
   }, function () { return { failed: true }; });
 }
@@ -186,7 +191,7 @@ function gcalSync(manual, round) {
   gcalCall('sync').then(function (d) {
     gcal.busy = false; gcalApply(d);
     if (d.more && (round || 0) < 5) { gcalSync(manual, (round || 0) + 1); return; }
-    if (manual) toast(d.failed || d.error ? 'Could not reach Google Calendar. Try again in a minute.' : d.connected ? 'Calendar is up to date' + (d.created || d.updated || d.removed ? ' · ' + [d.created && d.created + ' added', d.updated && d.updated + ' updated', d.removed && d.removed + ' removed'].filter(Boolean).join(', ') : '') : (d.reason || 'Google Calendar is not connected'));
+    if (manual) toast(d.failed || d.error ? (d.reason || d.error || 'Could not reach Google Calendar. Try again in a minute.') : d.connected ? 'Calendar is up to date' + (d.created || d.updated || d.removed ? ' · ' + [d.created && d.created + ' added', d.updated && d.updated + ' updated', d.removed && d.removed + ' removed'].filter(Boolean).join(', ') : '') : (d.reason || 'Google Calendar is not connected'));
     softRender();
   });
 }
@@ -1771,7 +1776,7 @@ var ACT = {
   gcalSyncNow: function () { gcalSync(true); },
   gcalConnect: function () {
     gcalCall('url').then(function (d) {
-      if (!d.url) { gcalApply(d); toast('Could not start the Google sign-in. Try again in a minute.'); rerender(); return; }
+      if (!d.url) { gcalApply(d); if (d.reason) modal({ title: 'Could not start the Google sign-in', text: d.reason, buttons: [{ label: 'OK' }] }); else toast('Could not start the Google sign-in. Try again in a minute.'); rerender(); return; }
       gcal.waiting = true;
       modal({ title: 'Connect Google Calendar', text: 'Google opens in your browser. Choose your account and allow access to your calendar events. Then come back to this app.',
         html: '<a class="btn block" id="gcalGo" href="' + esc(d.url) + '" target="_blank" rel="noopener">Continue to Google</a>',
